@@ -110,6 +110,8 @@ export function createSandbox(options: SandboxOptions): Sandbox {
 
   const panel = document.createElement('aside');
   panel.id = 'dev-sandbox';
+  // Shares the one panel language (D-032) rather than carrying its own chrome.
+  panel.className = 'panel';
   panel.innerHTML = `
     <h3>Developer Sandbox</h3>
     <div class="dev-mode">Mode: <b>${mode}</b></div>

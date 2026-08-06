@@ -9,6 +9,7 @@ export default defineConfig({
       input: {
         game: resolve(import.meta.dirname, 'index.html'),
         development: resolve(import.meta.dirname, 'development.html'),
+        gauntlet: resolve(import.meta.dirname, 'gauntlet.html'),
       },
     },
   },

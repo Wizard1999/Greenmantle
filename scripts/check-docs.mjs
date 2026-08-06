@@ -7,9 +7,11 @@
  * row. Cheap to check, so check it rather than trusting discipline.
  */
 import { readFile, readdir } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
+// resolve(import.meta.dirname) rather than new URL(..).pathname: on Windows the
+// latter yields "/O:/..." and joining it produces "O:\O:\...".
+const root = resolve(import.meta.dirname, '..');
 const doc = await readFile(join(root, 'docs/ARCHITECTURE.md'), 'utf8');
 
 async function walk(dir) {
@@ -23,7 +25,7 @@ async function walk(dir) {
 }
 
 const files = await walk(join(root, 'src'));
-const missing = files.filter(f => !doc.includes(f.split('/').pop()));
+const missing = files.filter(f => !doc.includes(basename(f)));
 
 if (missing.length) {
   console.error(`docs/ARCHITECTURE.md is missing ${missing.length} module(s):`);

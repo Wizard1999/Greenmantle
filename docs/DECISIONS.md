@@ -3,6 +3,15 @@
 Append-only. Each entry records what was decided, why, and what was rejected.
 **Do not relitigate these without a new entry superseding the old one.**
 
+> **If the designer decides something in conversation, it lands here the same
+> day.** This has failed twice already: `GAME_DESIGN.md` §11.1 had to be
+> *restored* after being dropped in an intermediate revision, and the current
+> `CURRENT_STATE.md` handoff opens by saying its contents "existed only in a
+> chat that has ended". A fresh session has the repository and nothing else — a
+> decision that was made but never written down is indistinguishable from one
+> that was never made, and will be raised as an open question again. D-033
+> through D-036 are all answers that had to be given a second time.
+
 ---
 
 ## D-001 — The simulation is pure and headless
@@ -585,11 +594,15 @@ laser. Animation, effects, sound, and damage timing should preserve that read.
 ---
 
 ## D-024 — Conclave material language
-**Date:** 2026-07-27 · **Status:** art direction seed
+**Date:** 2026-07-27 · **Status:** art direction seed · **extended by D-031**
 
 **Decision:** Conclave forms should appear almost constructed from water and
 fabric. This is a silhouette/material constraint for later concept development,
 not yet a finalized production specification.
+
+> **Superseded in part.** D-024 constrained what Conclave is *made of* and left
+> its *proportions* open, which permitted the humanoid scholar-navigator read
+> that D-031 rejects. Material language stands; silhouette does not.
 
 ---
 
@@ -784,3 +797,320 @@ scripts (`PLAY_GREENMANTLE.bat`, `OPEN_GREENMANTLE_WEBSITE.bat`) and versioned
 handoff naming (`Greenmantle-v1.23.0-work`) now use Greenmantle. D-015 is
 superseded but retained — the reasoning that produced Longbarrow is still the
 reasoning that produced its successor.
+
+---
+
+## D-031 — No race is humanoid; each reads as a *kind of thing*
+**Date:** 2026-08-06 · **Status:** locked, from the designer · extends D-024
+
+**Decision:** Conclave must not read as human. No race may. Each of the four is
+recognisable at a glance as a distinct category of thing, and "people" is not
+one of the categories:
+
+| Race | Reads unmistakably as |
+|---|---|
+| Cohort | technology — a machine, however fossilised |
+| Mycora | plant life |
+| Titanfolk | earthen beasts |
+| Conclave | *(its own kind of thing — water and fabric, not a person made of them)* |
+
+**Reason.** §1 states the four races are **forces of nature, not
+civilizations**, and §8.8 goes to some length ruling out accidental
+Terran/Protoss/Zerg parallels. Three of the four already honour that: nothing
+about a fossil war-machine, a walking blight, or a standing landform invites a
+human read. Conclave was the exception, and the drift is traceable — §8.7
+describes "navigator-scholar units", §8.8 says "waterway civilization", and
+D-024 constrained only the *material* while leaving proportion open. Water and
+fabric draped on a two-arms-two-legs frame is a robed person, which makes
+Conclave the one race that reads as a civilization in a game whose premise is
+that none of them are. It also lands it closest to Protoss, the exact parallel
+§8.8 spends its length avoiding.
+
+The governing rule in §1 — every race answers the same questions differently,
+*based on a core value it holds* — is what makes the fix straightforward.
+Conclave's value is Knowledge and its element is Water, and its mechanics are
+already network-shaped: Project from Network construction, Coordination as a
+function of links, an economy that starves when a link is cut. A humanoid is
+the one silhouette that expresses none of that. **The form should follow the
+network, not carry it** — Conclave should read as *current given purpose*
+rather than as a people who direct currents.
+
+**Consequence:**
+
+- The existing `conclave-ritual.webp` concept image is now a **reference for
+  material and palette only**, not for silhouette or proportion. It is not
+  deleted — it records what was explored — but it must not be used as a
+  production target for form. `ART_REFERENCES.md` and `ART_PROMPTS.md` need
+  correcting before any Conclave art is generated against them.
+- The unit roster names in §8.7 (Adept, Channeler, Phantom, Archivist,
+  Ascendant) read as scholarly job titles and pull toward the humanoid reading.
+  Renaming is **not** decided here — it is a designer call, and it is logged in
+  `WORKLOG.md` as held back.
+- Nothing mechanical changes. Conclave is Phase 3; this lands before any
+  Conclave art or geometry is produced, which is the cheapest possible moment.
+
+**Rejected:** keeping a humanoid Conclave as deliberate contrast against three
+non-humanoid races. It is a coherent argument — one recognisable silhouette
+among three alien ones would read as *the* civilization — but it directly
+contradicts the locked §1 framing that no race is a civilization, and it hands
+the most familiar shape in the genre to the race already nearest a StarCraft
+parallel.
+
+---
+
+## D-033 — The resource schema, resolved
+**Date:** 2026-08-06 · **Status:** locked, from the designer · resolves D-021 and `GAME_DESIGN.md` §11.1
+
+**Decision:** Four resources, in three different *kinds*. The distinction that
+D-021 deferred was never "what are they called" but "how is each one obtained",
+and that is what this settles:
+
+| Resource | Kind | How it is obtained |
+|---|---|---|
+| **Material** | Gatherable | Harvested from the map |
+| **Legacy** | Gatherable | Harvested from the map |
+| **Dominion** | Derived statistic | Determined by the territory you control |
+| **Relics** | Contested objective | Won from encounters players compete over |
+
+**Reason.** D-021 accepted the vocabulary and explicitly refused to migrate the
+code until this was known, because a premature rename would "collapse distinct
+systems into one" — and it would have. Three of the four are not currencies at
+all in the same sense: Dominion is never picked up, it is a readout of board
+control, and Relics are not harvested but won. Renaming `essence` to any of
+these before knowing that would have produced a gather loop for a statistic.
+
+**Consequence — and the part that is real work:**
+
+- **There are now two gatherables where the build ships one.** `essence` becomes
+  **Legacy** — D-025 already made the gatherable violet and named the palette
+  entry `PALETTE.legacy` precisely in anticipation of this. **Material** is a
+  new node type, a new colour outside the four race elements and outside
+  violet, and a second number in the economy. This is not a rename; it is an
+  economic system change, and it should land against `sim/economy.ts` with its
+  own tests rather than as a search-and-replace.
+- **Dominion needs a territory model.** `supply.ts` already computes control
+  radius per building. Dominion is derived from that and must be *hashed state*
+  if anything spends it (D-010, D-012).
+- **Relics ride on the PvE/PvP encounter system** in §6, which is Phase 4. No
+  work is unblocked yet, but the resource is now defined rather than floating.
+- **This does not give any race a second unrelated resource.** §8.5's rule —
+  one per-race stat gates army size, automation bandwidth and tech together —
+  is about Command / Population / Coordination / Territory, which are supply,
+  not gatherables. Material and Legacy are universal inputs; the per-race stat
+  is unchanged.
+
+**Flagged, not decided:** Titanfolk's supply stat is named **Territory** (§8.3)
+and Dominion is "determined by the territory you control". Two different systems
+currently wear the same word. Worth a naming pass before Titanfolk is built;
+recorded here so it is not discovered late.
+
+### D-033a — Material is loosely defined, and that is an engine requirement
+
+**Decision:** *What* Material comes from is deliberately open — trees, nearby
+rocks, digging into a mountainside. All of it yields Material for now.
+
+**Reason, and why this is architecture rather than flavour.** The point is not
+that the sources are varied; it is that the engine must not care. Underneath
+the game is a reusable RTS engine (`ENGINE_VISION.md`, D-029), and the test of
+that claim is whether the entire game design can be redrawn without touching
+anything outside the design data. A gather loop that knows about crystals fails
+that test the first time the resource becomes a forest.
+
+**Consequence:** a resource node is a **harvestable source** declaring what it
+yields, how much, how it is worked and how it presents — all in `src/data/`.
+`sim/economy.ts` reads those declarations generically and must never name a
+source type. Adding "mine the mountainside" then costs a data entry and a mesh,
+not an engine change. This is the same rule D-029 applied to unit traits,
+applied to the economy.
+
+---
+
+## D-034 — Terrain is terrain; there is no separate map-feature system
+**Date:** 2026-08-06 · **Status:** locked, from the designer · resolves `GAME_DESIGN.md` §11.1
+
+**Decision:** Mountain passes, cliffs, ramps, chokepoints and alternate routes
+are **produced by map generation as terrain**, not implemented as distinct
+mechanical systems layered on top of it. There is no "tunnel object", no "ramp
+entity", no special-cased hidden route.
+
+**Reason:** §2 already locks high ground, flanking, chokepoints and terrain as
+the things that decide fights. A second system that also produces tactical
+geography would mean two sources of truth for the same question — a unit would
+have to ask both "how high am I" and "am I in a tunnel", and the answers could
+disagree. One heightfield and one boundary polygon answer everything, and every
+existing consumer — pathing, placement, fog, the minimap, saves, replays — is
+already wired to those.
+
+**Consequence:** the procedural generator carries this weight. Interesting
+geography is a *generator* requirement (`MAP_GENERATION.md`), not a gameplay
+feature to be scheduled separately. `MAP_VERSION` must be bumped whenever the
+generator changes, or old replays play out on ground that no longer matches.
+
+**Rejected:** tunnels and hidden routes as first-class map elements, the early
+"living playset" idea recorded in §11.1. Kept as a rejected alternative rather
+than deleted, because the reason it was attractive — surprise and asymmetric
+routes — is a real goal that the generator now owns.
+
+---
+
+## D-035 — Air and ground draw on the same supply pool
+**Date:** 2026-08-06 · **Status:** locked, from the designer · resolves `GAME_DESIGN.md` §11.1
+
+**Decision:** Air units draw on the **same per-race supply resource** as ground
+units — Command for Cohort, Population for Mycora, Coordination for Conclave,
+Territory for Titanfolk. There is no separate air pool.
+
+**Reason:** §8.5's cross-race rule is that one stat per race governs army size,
+automation bandwidth and tech power simultaneously, and that this is "what keeps
+the four systems feeling unified rather than bolted together". A dedicated air
+pool would be exactly the second unrelated resource that rule forbids. It also
+makes air a genuine *choice* rather than a free additional army: fielding air
+costs ground, which is the trade §7 wants when it says air should "enhance the
+battlefield, not escape it".
+
+**Consequence:** §7's "command-bandwidth limits" as an anti-deathball measure is
+now concrete rather than aspirational — it is the shared pool. Air rosters must
+be costed against ground units in the same currency when Phase 4.2 arrives.
+
+---
+
+## D-036 — The World Turtle is confirmed by the designer
+**Date:** 2026-08-06 · **Status:** locked, from the designer · confirms D-026
+
+**Decision:** D-026's far-zoom World Turtle is wanted. Build whatever art it
+needs.
+
+**Reason:** D-026 arrived in an external import rather than from the designer,
+and the previous handoff flagged it as "a real scope addition, worth confirming
+before more art is built on it". It is confirmed. That caveat is now closed and
+should not be raised again.
+
+**Consequence:** the World Turtle work in `TODO.md` — distance-tiered shell,
+low-detail far silhouette for head, limbs and tail, far-zoom profiling — is
+approved scope rather than provisional.
+
+---
+
+## D-037 — Environmental variation is symmetric, never a die roll
+**Date:** 2026-08-06 · **Status:** locked, from the designer
+
+**Decision:** Night, biome and any future weather **do** affect gameplay. Each
+carries advantages *and* disadvantages, balanced overall, so the effect is a
+change of feel rather than a change of who is winning. The governing rule:
+
+> Variation is legitimate when both sides face the same conditions. What is
+> forbidden is variation that hands one player an advantage they did not earn.
+
+**Reason:** this is the precise form of the "no randomness" pillar, and it is
+narrower than it first appears. D-019 removed the to-hit roll because it added
+variance that "rewards neither positioning nor skill, only luck". Night falling
+on both armies at once is not that: it is a *known, symmetric, readable*
+condition that both players can plan around, and planning around it is exactly
+the skill §1 wants to reward. A dice roll is unfair because it is private and
+unearned; a night cycle is public and shared.
+
+**Consequence:**
+
+- Night may change vision range, and races may perform differently in different
+  biomes or weather. Each such effect must be a declared trait in `src/data/`,
+  never a unit-name check in `sim/` (D-029).
+- **Symmetry is a testable property and must be tested.** An effect that applies
+  at different times, or to different amounts of the map, for the two players is
+  a bug — and B-007 shows this project already ships one: terrain height is not
+  rotationally symmetric, so one spawn holds high ground for free.
+- Every environmental effect stays derived from `world.tick` and the map seed
+  (D-013, D-017), never from wall clock and never from `world.rngState` at
+  match time — so a replay reproduces the same weather on the same tick.
+- Effects must be **readable before they matter**. A player who cannot see night
+  approaching cannot plan around it, and an unplannable condition is a die roll
+  wearing a clock.
+
+**Rejected:** night as purely cosmetic. It was the safe option and it wastes a
+system that is already simulation state, already hashed, and already displayed.
+
+---
+
+## D-032 — The HUD is one command surface; help is timed, not permanent
+**Date:** 2026-08-06
+
+**Decision:** The in-game HUD is rebuilt as a single console in one visual
+language ("warm vellum"), laid out from the four screen corners, with the
+battlefield uninterrupted between them. Permanent instructional text is
+replaced by help that arrives when it is wanted. Developer scaffolding is gated
+behind `?dev=` at the point of construction, not merely hidden.
+
+**What was actually wrong.** Measured, not asserted (`scripts/measure-hud.mjs`,
+run against the running build at 1237x604 to match the recorded baseline):
+
+| | Before | After |
+|---|---|---|
+| HUD share of viewport | 49.4% | 23.8% |
+| Panels overlapping | 5 pairs | 0 |
+| Distinct panel backgrounds | 5, across two visual languages | 1 |
+| Panels declaring a z-index | 3 of 11 | 8 of 8 |
+| Buttons a click cannot reach | 3 of 13 | 0 of 13 |
+
+The last row is the one that mattered. `.panel` set `pointer-events: none`;
+`#card` and `#chain` overrode it and `#research` did not, so every research
+button passed its click through to the battlefield. `elementFromPoint` at the
+panel's centre returned the CANVAS. The tech system (D-028) had shipped with no
+player access at all, and nothing failed loudly enough to notice.
+
+**Five choices worth recording:**
+
+**1. Panels accept pointer events by default.** The old default was `none` with
+per-panel opt-ins. Both failure modes are now inverted: a panel that wrongly
+swallows a click is immediately visible, and one that wrongly drops a click can
+no longer exist. Read-only surfaces (`#res`, `#flash`, `#build-id`, `#selbox`)
+opt *out*, and there are four of them, so the exception list is short enough to
+read.
+
+**2. The keybinding wall is split by *when* help is wanted, not deleted.** The
+twelve-line block headed "Phase 1.7 — Squads & Behaviour Chains" was doing two
+jobs badly. Learning the game is now the guided tutorial, which opens itself
+once on a first visit and never again — it already existed and already watched
+world state to know when a step was done, it was just hidden behind a button
+nobody had a reason to press. Looking a key up is now a reference sheet on `?`,
+grouped by intent, which is a *superset* of the old wall: it adds the bindings
+the wall never listed (R, Esc, minimap click) and drops only the milestone
+number, which was never help. `CONTROL_GROUPS` is plain data and a test asserts
+it covers every key `input/keyboard.ts` binds, so the sheet cannot silently
+rot into a lie.
+
+**3. The debug readout is gated by construction, not by CSS.** `?dev=` decides
+whether the DOM is built at all. A `display: none` gate would have kept the
+panel one stylesheet edit away from shipping again, and would still have put
+seven live counters in a player's document.
+
+**4. Settings live inside the reference sheet.** The quality selector was a dark
+monospace chip floating over the battlefield, in a different visual language
+from everything within 200 px of it, for a choice a player makes once a session.
+It is now a row at the *top* of the sheet — above the reference table, because
+the table is tall enough to scroll on a laptop and a control past the fold is a
+control the player has to go looking for. That was verified by hit-testing the
+select after opening the sheet, not by reading the markup.
+
+**5. One panel material, chosen against the art direction rather than the
+genre.** The bar was StarCraft II's command console — one coherent surface,
+nothing overlapping, everything reachable. Its *look* was deliberately not
+copied: D-005 asks for warm painterly light with shadows shifting toward violet,
+so panels are aged vellum with a weathered brown edge and a violet-shifted
+shadow, headings in Georgia, costs in `PALETTE.legacy` violet. Monospace now
+appears nowhere a player can see it, which makes a leak of developer chrome
+visible at a glance.
+
+**Also fixed in passing:** the minimap drew resource nodes in teal, directly
+contradicting D-025 on the surface a player scans most often. Now violet.
+`#build-id` carried no `.panel` class, so it had no positioning at all and laid
+out as a full-width static block behind the top of the HUD.
+
+**Rejected:** collapsing the research panel to a header to buy back screen
+share. It would have traded the actual defect — a system the player could not
+find — for a percentage point.
+
+**Honest limit:** panels are fixed-size objects, so screen share is
+viewport-dependent. At 1920x1080 the battlefield holds **90.5%**, inside
+`UI_BLUEPRINT.md`'s 85–90% target. At 1280x800 it holds **82.6%**, short of it,
+even after a media query tightens the whole console. Going further means
+shrinking the selection card or the minimap past legibility, which is the wrong
+trade — but the gap is real and is not closed.

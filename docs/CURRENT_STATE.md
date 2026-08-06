@@ -4,17 +4,176 @@
 > the newest entry is immediately below, older history is archived further
 > down under "Historical log".
 
-## 🔑 SESSION HANDOFF — read before starting work
+## 2026-08-06 — In-game HUD rebuilt as one command surface (D-032)
 
-Everything below existed only in a chat that has ended. It is written down
-because it would otherwise be lost.
+Presentation only. `src/sim/` untouched.
+
+**The defect that mattered:** `.panel` set `pointer-events: none` and
+`#research` never overrode it, so every research button passed its click
+through to the canvas. `document.elementFromPoint` at the panel centre returned
+the CANVAS. The tech system (D-028) had shipped with **no player access at
+all**. Panels now default to `pointer-events: auto` and four read-only surfaces
+opt out, so that failure mode cannot recur silently.
+
+**Measured, at the baseline's own 1237x604 viewport** (`npm run capture` for
+pictures, `node scripts/measure-hud.mjs` for numbers — both need a dev server):
+
+| | before | after (steady) |
+|---|---|---|
+| HUD share | 49.4% | 23.8% |
+| overlapping panel pairs | 5 | 0 |
+| distinct panel backgrounds | 5 | 1 |
+| panels declaring z-index | 3 / 11 | 8 / 8 |
+| buttons a click cannot reach | 3 / 13 | 0 / 13 |
+
+At 1920x1080 the battlefield holds 90.5%; at 1280x800 it holds 82.6%, which is
+short of `UI_BLUEPRINT.md`'s 85–90% and is the honest weak point.
+
+**What moved.** The 12-line keybinding wall headed "Phase 1.7 — Squads &
+Behaviour Chains" is gone; the tutorial now opens itself once on a first visit
+(`localStorage` records completed/skipped/dismissed), and the full reference
+lives on `?` / the Keys button in `src/ui/controlsSheet.ts`. The debug readout
+moved to `src/ui/debugReadout.ts` and is built **only** under `?dev=`. The
+quality selector moved into the reference sheet. New files:
+`src/ui/controlsSheet.ts`, `src/ui/debugReadout.ts`, `scripts/measure-hud.mjs`,
+`tests/controlsSheet.test.ts`, `tests/debugReadout.test.ts`.
+
+**Fixed in passing:** the minimap drew resource nodes teal, contradicting D-025;
+`#build-id` had no `.panel` class so it laid out as a full-width static block.
+
+**Not done:** `#res` still says "essence" while the tutorial and research panel
+say "Legacy". D-021 explicitly defers that rename, so it was left alone — but a
+player sees both words for one resource.
+
+---
+
+## 🔑 SESSION HANDOFF — 2026-08-06 — read before starting work
+
+**Paused mid-run at the designer's request, ahead of a usage limit. Resume from
+"Resume here" below.**
 
 ### Where things are
 
-- `main` and `claude/project-plan-review-34kyva` are **identical** and current.
-  Either is safe to start from.
-- **340 tests · 68 modules documented · `npm run verify` green.**
-- Working tree clean, nothing unpushed.
+- **369 tests · 72 modules documented · `npm run verify` green.**
+- **Working tree has substantial uncommitted work.** It is committed locally on
+  branch `session/2026-08-06-gauntlet` — see the commit for the full diff.
+  **Nothing has been pushed.** The designer has not authorised a push.
+- The dev server runs on `:5173`. `npm run capture` needs it running.
+
+### The three things that matter most
+
+**1. Combat does not work, and this is now proven rather than suspected.**
+Three blocking defects, each confirmed by direct measurement this session and
+written up with repros in `BUGS.md`:
+
+- **B-005** — a mirrored 10v10 resolves **10–0 for whichever team was pushed
+  into `world.units` first**, in exactly 384 ticks either way. `stepCombat`
+  walks the array applying damage immediately, so an earlier unit strikes,
+  kills, and its victim is gone before it swings back. This is not RNG (D-019
+  removed all of it). It invalidates §2's "no spawn point has an inherent
+  advantage" and silently invalidates every combat measurement taken on top of
+  it. **Fix: two-phase resolution** — read all attack intents against tick-start
+  state, then apply, then reap. Do **not** shuffle the array; that trades a
+  systematic bias for a seed-dependent one and breaks D-019.
+- **B-006** — `COMBAT.acquireRange` is 9.0; a Legionnaire's weapon range is
+  **0.9**. Units see enemies ten times further than they can hit them and
+  nothing closes the gap: `stepCombat` writes `u.targetId`, `stepMovement` reads
+  only `u.target` (a position), and nothing converts one to the other. Measured:
+  two 10-unit lines 30 apart, 3600 ticks, **zero damage, zero movement**. The
+  selection card advertises "Attack Move — engage along route", which is false.
+  **Fix needs a designer call on leash length** — unbounded pursuit turns every
+  skirmish into a map-wide rout. Recommendation: leashed pursuit gated by
+  `orderMode` so hold-position never wanders, leash as a `tuning.ts` value.
+- **B-007** — terrain is not rotationally symmetric. 800 mirrored point-pairs
+  across 200 seeds: mean height delta **0.69**, worst **1.36**, 600/800 differ
+  by >0.01. With `highGroundBonus` 1.25 / `lowGroundPenalty` 0.85 one spawn owns
+  high ground for free. Existing tests assert *position* symmetry only.
+
+**Determinism is not fairness.** `determinism.test.ts` was green through all of
+this. A fight decided by array order is perfectly deterministic and perfectly
+unfair. Symmetry needs its own assertions.
+
+**2. Seven held-back items were answered by the designer and are now written
+down.** Four were §11.1 questions that had been answered in conversation but
+never reached a file — a fresh session cannot tell an unrecorded answer from an
+unmade decision. `DECISIONS.md` now opens with a standing note about this.
+D-031 (no race is humanoid), D-032 (HUD is one surface), D-033 + D-033a
+(resource schema; Material is loose, which is an *engine* requirement), D-034
+(terrain is terrain), D-035 (air shares supply), D-036 (World Turtle confirmed),
+D-037 (night/biome/weather affect play, symmetric).
+
+**3. Scope narrowed by the designer: get Cohort and Mycora working at a basic
+level.** Conclave and Titanfolk wait for a roster redesign. Do not spend effort
+on their naming or art.
+
+### New tooling — read before trying to look at the game
+
+`npm run capture` drives a real headless Chromium and writes reproducible
+screenshots to `.capture/` (gitignored) plus an `index.json` manifest.
+
+**You will probably need it.** Editor-embedded browser surfaces here report
+`document.hidden` and fire **zero** `requestAnimationFrame` callbacks — the
+render loop never runs, every screenshot is black, and that is indistinguishable
+from a genuinely broken game. Do not diagnose a "broken build" from a black
+screenshot without checking `document.hidden` first.
+
+Shots name an exact camera state and tick, driven through `loop.stepOnce()` and
+the camera's public methods, so there is no capture-only render path. A
+`window.__greenmantle` handle exists **only** under `?capture=1`.
+
+### Interrupted work, resumable
+
+The slice-0 HUD gauntlet was stopped mid-critique to avoid a usage limit. The
+**builder finished and its work is in the tree** (`controlsSheet.ts`,
+`debugReadout.ts`, D-032, HUD rebuild). The three critics and the synthesis step
+did not complete. Resume with:
+
+```
+Workflow({ scriptPath: "<session>/workflows/scripts/slice0-interface-truth-wf_86a44b30-34e.js",
+           resumeFromRunId: "wf_86a44b30-34e" })
+```
+
+### Resume here — priority order
+
+1. **B-005, two-phase combat resolution.** Nothing else about combat can be
+   measured until this is fixed. Add a symmetry test that fails today.
+2. **B-006, pursuit.** Needs the leash decision first — ask, do not guess.
+3. **B-007, symmetric terrain.** Make `terrainHeightAt` symmetric under the same
+   rotation the boundary already uses, and assert height symmetry.
+4. **Finish slice 0** — resume the critic phase above.
+5. **B-004, the fog.** Now the loudest thing on screen at every zoom: stair-
+   stepped terraces with terrain slivers punching through. `BUGS.md` calls it
+   "hard-tiled", which understates it.
+6. **Mycora**, per the narrowed scope.
+
+### The one open designer question
+
+**Stealth / detection.** Every other §11.1 item is now resolved. The designer
+believes this was settled in conversation; a full search of `docs/` on
+2026-08-06 found only restatements of the question, never an answer. It blocks
+the Chronicler, and through it D-020's Command Overload mitigation. One written
+sentence closes it.
+
+### Environment hazards
+
+1. **The verification gate did not run on Windows.** `check-docs.mjs` resolved
+   its root via `new URL('..', import.meta.url).pathname`, which yields `/O:/…`
+   and joins into `O:\O:\…`. Fixed. It immediately caught real drift, which
+   means the previous session pushed without a green gate.
+2. **The git remote resets.** Unchanged from the previous handoff — always
+   `git remote -v` before trusting a push.
+3. **Usage limits interrupt workflows mid-run.** Both workflows this session hit
+   one. `resumeFromRunId` replays completed agents from cache; use it
+   immediately rather than reporting the failure and moving on.
+
+### Superseded from the previous handoff
+
+- "Research UI is the single biggest gap" — **done**, and it was worse than
+  recorded: the panel shipped with `pointer-events: none` inherited from
+  `.panel`, so every research button passed clicks through to the canvas. It was
+  unreachable, not merely occluded. Now visible and clickable.
+- "340 tests · 68 modules" — now 369 · 72.
+- **D-026 World Turtle no longer needs confirming.** D-036 confirms it.
 
 ### Known environment hazards
 

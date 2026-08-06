@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gauntlet Loop — Greenmantle</title>
+    <meta name="description" content="Live record of the Greenmantle build loop: what is on the bench, what it is judged against, and what each critic actually found." />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="data:," />
+  </head>
+  <body class="gauntlet">
+    <main class="gauntlet-shell">
+      <header class="gauntlet-head">
+        <h1>Gauntlet Loop — Greenmantle</h1>
+        <p class="gauntlet-lede">
+          Building the work already written into <code>docs/TODO.md</code> and
+          <code>docs/ROADMAP.md</code>, judged by blind side-by-side comparison against
+          StarCraft II and against our own concept art. Builders and critics run with
+          fresh context; nothing ships without approval.
+        </p>
+        <p class="gauntlet-state" data-state>Loading the work log…</p>
+      </header>
+
+      <section class="gauntlet-block">
+        <h2>What finishing actually means</h2>
+        <p data-scope></p>
+      </section>
+
+      <section class="gauntlet-block" data-pieces-block>
+        <div class="piece-list" data-pieces></div>
+      </section>
+
+      <section class="gauntlet-block gates">
+        <div>
+          <h3>every round:</h3>
+          <ul data-every-round></ul>
+        </div>
+        <div>
+          <h3>never:</h3>
+          <ul data-never></ul>
+        </div>
+      </section>
+
+      <section class="gauntlet-block">
+        <h2>Held back, and why</h2>
+        <p class="sub">Not skipped — these are the items no agent can honestly close.</p>
+        <dl class="held-list" data-held-back></dl>
+      </section>
+
+      <section class="gauntlet-block">
+        <h2>Rounds</h2>
+        <p class="sub">Newest first. Each entry is what was established, not what was claimed.</p>
+        <div class="round-list" data-rounds></div>
+      </section>
+
+      <footer class="gauntlet-foot">
+        <p>
+          Published from <code>docs/WORKLOG.md</code> by <code>npm run sync:site</code>.
+          <a href="./development.html">Project roadmap and progress</a> ·
+          <a href="./index.html">Play the build</a>
+        </p>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/gauntlet.ts"></script>
+  </body>
+</html>

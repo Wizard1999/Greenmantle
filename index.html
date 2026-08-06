@@ -5,200 +5,404 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Greenmantle</title>
 <style>
-  html, body { margin: 0; padding: 0; overflow: hidden; background: #7ec8e3; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  /* =====================================================================
+     THE COMMAND SURFACE — one visual language, applied everywhere (D-032)
+     ---------------------------------------------------------------------
+     "Warm vellum": every panel is the same painterly material — aged paper
+     lit warm, edged in weathered brown, dropping a shadow that shifts toward
+     violet rather than going black (D-005). Two type families only: Georgia
+     for headings, the system sans for everything a player reads at speed.
+     Monospace is reserved for developer scaffolding, which players never see.
+
+     Three rules this stylesheet enforces structurally:
+       1. Panels default to pointer-events:auto. The old default was `none`
+          with per-panel opt-ins, which silently killed #research. A panel
+          that swallows a click is a visible bug; one that drops it is not.
+       2. Every panel declares a z-index from the --z-* scale. Paint order is
+          decided here, never inherited from DOM order.
+       3. Panels are laid out from the four screen corners with fixed gutters
+          so no two can meet at any supported viewport.
+     ===================================================================== */
+  :root {
+    --ink:        #352c20;
+    --ink-soft:   #7a6a52;
+    --paper:      rgba(250, 244, 229, .90);
+    --paper-lit:  rgba(255, 253, 245, .78);
+    --edge:       rgba(101, 79, 48, .34);
+    --edge-soft:  rgba(101, 79, 48, .17);
+    --gold:       #b07d2a;
+    --gold-fill:  #f7e8c2;
+    --legacy:     #6d43a6;     /* D-025: the resource is violet, never teal */
+    --alert:      #a33a2a;
+    --shade:      0 12px 28px rgba(46, 32, 62, .32);
+    --sheen:      linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,0) 46%);
+    --serif:      Georgia, 'Iowan Old Style', 'Palatino Linotype', serif;
+
+    /* Layout budget. Panels are sized from here so the small-viewport rules at
+       the foot of this block can tighten the whole console by changing four
+       numbers, and so the flash line can be anchored to the card's real height
+       instead of a magic constant that drifts out of sync with it. */
+    --gutter:     14px;
+    --card-w:     560px;
+    --card-h:     118px;
+    --col-w:      208px;   /* research + minimap share one right-hand column */
+    --map-h:      196px;
+
+    /* Deliberate stacking order. Nothing paints by accident. */
+    --z-selbox:   10;
+    --z-console:  25;   /* the panels the game is played through */
+    --z-status:   30;   /* read-only readouts along the top */
+    --z-flash:    45;   /* transient messages, over the console */
+    --z-guide:    60;   /* first-run guide */
+    --z-sheet:    70;   /* the controls reference, a modal */
+    --z-dev:      80;   /* developer scaffolding, above everything */
+  }
+
+  html, body {
+    margin: 0; padding: 0; overflow: hidden; background: #0a0d0c;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--ink);
+  }
   canvas { display: block; }
+
+  /* ---------------------------------------------------------------- panel */
   .panel {
-    position: absolute; color: #2b2b2b; background: rgba(255,255,255,0.78);
-    padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5;
-    pointer-events: none;
+    position: fixed;
+    box-sizing: border-box;
+    color: var(--ink);
+    background-color: var(--paper);
+    background-image: var(--sheen);
+    border: 1px solid var(--edge);
+    border-radius: 12px;
+    box-shadow: var(--shade);
+    backdrop-filter: blur(7px);
+    padding: 10px 13px;
+    font-size: 13px;
+    line-height: 1.45;
+    pointer-events: auto;         /* rule 1: controls work unless told otherwise */
+    z-index: var(--z-console);    /* rule 2: every panel has an order */
   }
-  #hud { top: 12px; left: 12px; max-width: 300px; }
+  /* Read-only surfaces let the battlefield have the click. */
+  #res, #flash, #build-id, #selbox { pointer-events: none; }
+
+  .panel h3 {
+    margin: 0 0 7px; font: 600 12px/1.2 var(--serif);
+    letter-spacing: .09em; text-transform: uppercase; color: var(--ink-soft);
+  }
+
+  /* One button, everywhere. */
+  .panel button, .panel select, .panel input {
+    font: inherit; color: var(--ink);
+    background: var(--paper-lit);
+    border: 1px solid var(--edge-soft);
+    border-radius: 8px;
+    padding: 5px 9px;
+    cursor: pointer;
+    transition: background-color .12s, border-color .12s;
+  }
+  .panel button:hover:not(:disabled),
+  .panel select:hover { background: var(--gold-fill); border-color: var(--gold); }
+  .panel button:disabled { opacity: .38; cursor: not-allowed; }
+  .panel button:focus-visible, .panel select:focus-visible, .panel input:focus-visible {
+    outline: 2px solid var(--gold); outline-offset: 1px;
+  }
+  .muted { color: var(--ink-soft); }
+
+  /* ------------------------------------------------- top left: the tools */
+  /* The only two things here are ways *out* of the game — learn it, or look
+     something up. Settings live inside the reference sheet, which is where a
+     player goes once a match and never during a fight. */
+  #tools {
+    top: var(--gutter); left: var(--gutter);
+    display: flex; gap: 6px; align-items: center;
+    padding: 6px 7px; border-radius: 999px;
+    z-index: var(--z-status);
+  }
+  #tools button {
+    font-size: 11px; letter-spacing: .05em; text-transform: uppercase;
+    font-weight: 600; padding: 5px 11px; border-radius: 999px;
+  }
+  /* A toggle stays where it is and lights up; it never vanishes when used. */
+  #tools button.on { background: var(--gold-fill); border-color: var(--gold); }
+
+  /* ------------------------------------------------ top centre: the state */
   #res {
-    top: 12px; left: 50%; transform: translateX(-50%);
-    font-size: 15px; padding: 8px 18px; display: flex; gap: 22px; align-items: center;
+    top: var(--gutter); left: 50%; transform: translateX(-50%);
+    display: flex; gap: 15px; align-items: center;
+    padding: 6px 15px; z-index: var(--z-status);
+    white-space: nowrap;
   }
-  #res .big { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  #res .sub { color: #666; font-size: 12px; }
-  #clock { display: flex; align-items: center; gap: 7px; }
-  #clock .sub { text-transform: capitalize; min-width: 34px; }
+  #res > div { display: flex; align-items: baseline; gap: 5px; }
+  #res .big { font: 600 19px/1 var(--serif); font-variant-numeric: tabular-nums; }
+  #res .sub { color: var(--ink-soft); font-size: 11px; letter-spacing: .04em; }
+  #res .rule { width: 1px; height: 20px; background: var(--edge-soft); }
+  #clock { align-items: center !important; gap: 7px !important; }
+  #clock .sub { text-transform: capitalize; min-width: 30px; }
   /* The dial is the at-a-glance read; the digits are the precise one. Its
      background is set per-frame from the same light level the scene uses. */
   #clock .dial {
-    width: 15px; height: 15px; border-radius: 50%;
-    border: 1.5px solid rgba(0,0,0,.28); display: inline-block; flex: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid var(--edge); display: inline-block; flex: none;
   }
-  #debug { top: 12px; right: 12px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; min-width: 210px; }
-  #debug .row { display: flex; justify-content: space-between; gap: 16px; }
-  #debug .k { color: #666; }
-  #debug .warn { color: #b02e2e; font-weight: 600; }
-  #debug h4 { margin: 0 0 6px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #444; }
-  #research { top: 96px; right: 12px; width: 232px; max-height: 44vh; overflow-y: auto; }
-  #research h3 { margin: 0 0 8px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: #444; }
+
+  /* --------------------------------------------------- top right: build id */
+  #build-id {
+    top: var(--gutter); right: var(--gutter);
+    padding: 4px 9px; border-radius: 999px;
+    font: 10px/1.3 ui-monospace, Menlo, Consolas, monospace;
+    color: var(--ink-soft); letter-spacing: .03em;
+    z-index: var(--z-status);
+  }
+
+  /* ------------------------------------------- right column: research/map */
+  /* Research sits directly above the map, one 200px column, so the right edge
+     reads as a single stack rather than two unrelated boxes. */
+  #research {
+    right: var(--gutter); bottom: calc(var(--gutter) + var(--map-h) + 10px);
+    width: var(--col-w); max-height: min(30vh, 280px); overflow-y: auto;
+  }
   .tech-row {
-    display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%;
-    text-align: left; padding: 7px 9px; margin-bottom: 5px; cursor: pointer;
-    border: 1px solid rgba(0,0,0,.14); border-radius: 7px; background: rgba(255,255,255,.6);
-    font: inherit; font-size: 12px;
+    display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; width: 100%;
+    text-align: left; padding: 6px 9px; margin-bottom: 5px; font-size: 12px;
   }
-  .tech-row:hover:not(:disabled) { background: #fff; border-color: rgba(0,0,0,.3); }
-  .tech-row:disabled { opacity: .42; cursor: not-allowed; }
+  /* An unaffordable upgrade is still information: keep the name legible and let
+     the violet cost carry the "not yet" rather than fading the whole row out. */
+  #research .tech-row:disabled { opacity: .66; }
   .tech-name { font-weight: 600; }
-  .tech-cost { color: #7a4fb0; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .tech-pair { grid-column: 1 / -1; font-size: 10px; color: #666; }
-  .tech-empty { margin: 0; font-size: 12px; color: #666; }
+  .tech-cost { color: var(--legacy); font-variant-numeric: tabular-nums; font-weight: 700; }
+  .tech-pair { grid-column: 1 / -1; font-size: 10px; color: var(--ink-soft); }
+  .tech-empty { margin: 0; font-size: 12px; color: var(--ink-soft); }
   #research-progress { display: grid; gap: 6px; margin-bottom: 8px; font-size: 12px; }
-  .tech-bar { height: 5px; border-radius: 999px; background: rgba(0,0,0,.12); overflow: hidden; }
-  .tech-bar span { display: block; height: 100%; background: linear-gradient(90deg,#7a4fb0,#ffb765); }
-  .tech-cancel { font: inherit; font-size: 11px; padding: 3px 8px; cursor: pointer;
-    border: 1px solid rgba(0,0,0,.18); border-radius: 6px; background: rgba(255,255,255,.7); }
-  #selbox { position: absolute; border: 1.5px solid #ffe66d; background: rgba(255,230,109,0.18); pointer-events: none; display: none; }
-  #card {
-    bottom: 14px; left: 50%; transform: translateX(-50%);
-    min-width: 340px; pointer-events: auto; text-align: center;
-  }
-  #card h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .05em; text-transform: uppercase; color: #444; }
-  #card .btns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
-  #card button {
-    font: inherit; font-size: 12px; padding: 7px 12px; border-radius: 6px;
-    border: 1px solid #c9c2b4; background: #fffdf7; cursor: pointer; line-height: 1.3;
-  }
-  #card button:hover:not(:disabled) { background: #fff4d6; border-color: #d8b872; }
-  #card button:disabled { opacity: .42; cursor: not-allowed; }
-  #card button b { display: block; }
-  #card button .c { color: #777; font-size: 11px; }
-  #card .queue { margin-top: 8px; font-size: 12px; color: #555; min-height: 17px; }
-  #card .hint { margin-top: 6px; font-size: 11px; color: #888; }
-  #flash {
-    bottom: 128px; left: 50%; transform: translateX(-50%);
-    padding: 6px 14px; font-size: 12px; opacity: 0; transition: opacity .25s;
-  }
-
-  /* ---- behaviour chain editor (1.7) ---- */
-  #chain { bottom: 14px; left: 14px; width: 262px; pointer-events: auto; text-align: left; }
-  #chain h3 { margin: 0 0 6px; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: #444; }
-  #chain .squads { display: flex; gap: 5px; margin-bottom: 8px; }
-  #chain .squads button {
-    font: inherit; font-size: 12px; width: 26px; height: 26px; padding: 0;
-    border-radius: 6px; border: 1px solid #c9c2b4; background: #fffdf7; cursor: pointer;
-  }
-  #chain .squads button.on { background: #ffe1a8; border-color: #d8b872; font-weight: 700; }
-  #chain .squads button.empty { opacity: .38; }
-  #chain ol { margin: 0 0 8px; padding-left: 20px; font-size: 12px; line-height: 1.65; }
-  #chain ol li.now { font-weight: 700; color: #8a6100; }
-  #chain ol li button {
-    font: inherit; font-size: 10px; margin-left: 6px; padding: 0 5px; cursor: pointer;
-    border: 1px solid #ddd6c8; background: #fffdf7; border-radius: 4px; color: #999;
-  }
-  #chain .add { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
-  #chain .add button, #chain .run button {
-    font: inherit; font-size: 11px; padding: 5px 8px; border-radius: 6px;
-    border: 1px solid #c9c2b4; background: #fffdf7; cursor: pointer;
-  }
-  #chain .add button.arming { background: #d6f0ff; border-color: #7ab8dd; font-weight: 600; }
-  #chain .add button:disabled, #chain .run button:disabled { opacity: .42; cursor: not-allowed; }
-  #chain .run { display: flex; gap: 5px; align-items: center; }
-  #chain .run button.go { background: #dbf5d6; border-color: #86bf7a; font-weight: 600; }
-  #chain .run button.stop { background: #ffe0dd; border-color: #d99a92; }
-  #chain .note { font-size: 11px; color: #888; margin-top: 6px; line-height: 1.45; }
-  #chain .note.warn { color: #b02e2e; font-weight: 600; }
-  #chain .empty-state { font-size: 11px; color: #888; line-height: 1.5; }
-
-  #dev-sandbox {
-    position: absolute; right: 12px; bottom: 12px; width: 280px; z-index: 20;
-    color: #2b2b2b; background: rgba(248,245,234,.94); border: 1px solid rgba(80,68,48,.24);
-    border-radius: 10px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.16);
-    font-size: 12px; pointer-events: auto;
-  }
-  #dev-sandbox h3 { margin: 0 0 6px; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; }
-  #dev-sandbox .dev-mode { margin-bottom: 8px; color: #665f53; }
-  #dev-sandbox .dev-row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
-  #dev-sandbox button { font: inherit; border: 1px solid #c9c2b4; background: #fffdf7; border-radius: 6px; padding: 5px 8px; cursor: pointer; }
-  #dev-sandbox button:hover { background: #fff4d6; }
-  #dev-sandbox .dev-replay { margin: 8px 0; padding: 8px; border: 1px solid #d8d0c0; border-radius: 8px; background: rgba(255,255,255,.5); }
-  #dev-sandbox .dev-timeline-label { display: grid; gap: 5px; color: #665f53; }
-  #dev-sandbox .dev-timeline-label input { width: 100%; accent-color: #6c5b85; }
-  #dev-sandbox .dev-readout { margin: 8px 0 4px; padding: 8px; min-width: 300px; white-space: pre-wrap; line-height: 1.45; border-radius: 6px; background: rgba(35, 31, 25, .07); font-family: ui-monospace, Menlo, Consolas, monospace; }
-  #dev-sandbox small { color: #777; line-height: 1.35; display: block; }
-
+  .tech-bar { height: 5px; border-radius: 999px; background: var(--edge-soft); overflow: hidden; }
+  .tech-bar span { display: block; height: 100%; background: linear-gradient(90deg, var(--legacy), var(--gold)); }
+  .tech-cancel { font-size: 11px; padding: 3px 8px; }
 
   #minimap-wrap {
-    position: absolute; right: 14px; bottom: 14px; width: 220px; height: 170px;
-    padding: 8px; border-radius: 10px; pointer-events: auto;
-    background: rgba(8, 10, 8, .78); border: 1px solid rgba(232, 219, 177, .28);
-    box-shadow: 0 8px 30px rgba(0,0,0,.28); backdrop-filter: blur(5px);
+    right: var(--gutter); bottom: var(--gutter);
+    width: var(--col-w); height: var(--map-h); padding: 8px;
   }
-  #minimap { width: 100%; height: calc(100% - 28px); display: block; cursor: crosshair; touch-action: none; }
-  #map-seed-control { height: 24px; display: flex; gap: 4px; align-items: center; margin-bottom: 4px; color: #d9cfad; font: 10px/1 ui-monospace, Menlo, Consolas, monospace; }
-  #map-seed-control input { width: 72px; min-width: 0; color: #f6edcf; background: rgba(255,255,255,.07); border: 1px solid rgba(232,219,177,.25); border-radius: 4px; padding: 3px 5px; font: inherit; }
-  #map-seed-control button { color: #f6edcf; background: rgba(255,255,255,.08); border: 1px solid rgba(232,219,177,.25); border-radius: 4px; padding: 3px 6px; font: inherit; cursor: pointer; }
-  body.dev-mode #minimap-wrap { bottom: 316px; }
+  #minimap {
+    width: 100%; height: calc(100% - 30px); display: block;
+    cursor: crosshair; touch-action: none;
+    border-radius: 7px; border: 1px solid var(--edge-soft);
+    background: rgba(28, 24, 18, .55);
+  }
+  #map-seed-control {
+    height: 24px; display: flex; gap: 4px; align-items: center; margin-bottom: 6px;
+    color: var(--ink-soft); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  }
+  #map-seed-control input { flex: 1; min-width: 0; width: 100%; padding: 3px 6px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+  #map-seed-control button { padding: 3px 7px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
 
-  #quality-control {
-    position: fixed; right: 12px; top: 206px; z-index: 35; pointer-events: auto;
-    display: flex; gap: 7px; align-items: center; padding: 6px 8px;
-    border-radius: 6px; color: rgba(255,255,255,.88);
-    background: rgba(12,15,13,.72); font: 11px/1.2 ui-monospace, Menlo, Consolas, monospace;
-    backdrop-filter: blur(4px);
+  /* --------------------------------------- bottom left: squads and chains */
+  #chain { left: var(--gutter); bottom: var(--gutter); width: 250px; text-align: left; }
+  #chain .squads { display: flex; gap: 5px; margin-bottom: 8px; }
+  #chain .squads button {
+    font-size: 12px; width: 27px; height: 27px; padding: 0; text-align: center;
   }
-  #quality-control select {
-    color: #f4f0e4; background: #1a1e1a; border: 1px solid rgba(255,255,255,.22);
-    border-radius: 4px; padding: 3px 5px; font: inherit;
+  #chain .squads button.on { background: var(--gold-fill); border-color: var(--gold); font-weight: 700; }
+  #chain .squads button.empty { opacity: .34; }
+  #chain ol { margin: 0 0 8px; padding-left: 19px; font-size: 12px; line-height: 1.6; }
+  #chain ol li.now { font-weight: 700; color: var(--gold); }
+  #chain ol li button {
+    font-size: 10px; margin-left: 6px; padding: 0 5px; border-radius: 5px; color: var(--ink-soft);
+  }
+  #chain .add { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
+  #chain .add button, #chain .run button { font-size: 11px; padding: 5px 8px; }
+  #chain .add button.arming { background: var(--gold-fill); border-color: var(--gold); font-weight: 700; }
+  #chain .run { display: flex; gap: 5px; align-items: center; }
+  #chain .run button.go { background: var(--gold-fill); border-color: var(--gold); font-weight: 600; }
+  #chain .run button.stop { background: rgba(163, 58, 42, .14); border-color: rgba(163, 58, 42, .4); }
+  #chain .note { font-size: 11px; color: var(--ink-soft); margin-top: 6px; line-height: 1.45; }
+  #chain .note.warn { color: var(--alert); font-weight: 600; }
+  #chain .empty-state { font-size: 11px; color: var(--ink-soft); line-height: 1.5; }
+
+  /* -------------------------------------------- bottom centre: the card */
+  /* Fixed height on purpose. The flash line is anchored directly above it, and
+     a card that grows with the selection would walk into it. */
+  #card {
+    bottom: var(--gutter); left: 50%; transform: translateX(-50%);
+    width: var(--card-w); height: var(--card-h);
+    display: flex; flex-direction: column; padding: 9px 13px;
+  }
+  #card .top { display: flex; align-items: baseline; gap: 12px; }
+  #card h3 { margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #card .queue { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  /* A single row of equal columns that shrink rather than scroll. The first
+     version let the band scroll horizontally, and a mixed worker/combat
+     selection produces five buttons — the fifth sat past the edge and
+     `elementFromPoint` could not reach it. A command card that hides a command
+     is the same defect this pass exists to remove, one panel over. */
+  #card .btns {
+    display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 128px);
+    justify-content: start; gap: 6px; margin-top: 6px; flex: 1; min-height: 0;
+    overflow: hidden;
+  }
+  #card .btns.is-empty { display: flex; align-items: center; }
+  #card button {
+    padding: 6px 7px; font-size: 11.5px; line-height: 1.2; text-align: center;
+    overflow: hidden;
+  }
+  #card button b { display: block; }
+  #card button .c { display: block; color: var(--ink-soft); font-size: 10px; }
+  #card .hint { margin-top: 4px; font-size: 11px; color: var(--ink-soft);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #card .empty { align-self: center; font-size: 12px; color: var(--ink-soft); }
+
+  /* ------------------------------------------------------------- transient */
+  #flash {
+    bottom: calc(var(--gutter) + var(--card-h) + 12px);
+    left: 50%; transform: translateX(-50%);
+    padding: 6px 15px; font-size: 12px; border-radius: 999px;
+    opacity: 0; transition: opacity .25s; z-index: var(--z-flash);
+  }
+  #selbox {
+    position: fixed; display: none; z-index: var(--z-selbox); pointer-events: none;
+    border: 1.5px solid #f0d089; background: rgba(240, 208, 137, .16); border-radius: 2px;
   }
 
-  #tutorial-launcher {
-    position: fixed; left: 14px; top: 205px; z-index: 45; pointer-events: auto;
-    border: 1px solid rgba(238,220,166,.42); border-radius: 999px; padding: 7px 12px;
-    color: #f3e8c6; background: rgba(9,11,9,.78); cursor: pointer;
-    font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .06em;
-    text-transform: uppercase; backdrop-filter: blur(5px);
-  }
-  #tutorial-launcher:hover { background: rgba(43,47,37,.92); }
-  #tutorial-launcher.hidden { display: none; }
+  /* ---------------------------------------------------------- first run */
+  /* A new player is served by being walked through the first six minutes, not
+     by a wall of keys. The guide opens itself once, then never again. */
   #tutorial-panel {
-    position: fixed; left: 18px; top: 205px; z-index: 46; width: min(330px, calc(100vw - 36px));
-    box-sizing: border-box; display: none; pointer-events: auto; padding: 16px;
-    color: #eee6ce; background: rgba(7,9,7,.92); border: 1px solid rgba(238,220,166,.3);
-    border-radius: 12px; box-shadow: 0 18px 55px rgba(0,0,0,.45); backdrop-filter: blur(9px);
+    left: var(--gutter); top: 58px; width: min(300px, calc(100vw - 28px));
+    display: none; z-index: var(--z-guide); padding: 14px 16px;
   }
   #tutorial-panel.visible { display: block; }
-  #tutorial-panel .tutorial-topline { display: flex; justify-content: space-between; align-items: center; color: #aaa48f; font: 10px/1.2 ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: .08em; }
-  #tutorial-panel h2 { margin: 13px 0 7px; font: 600 20px/1.1 Georgia, serif; color: #fff8df; }
-  #tutorial-panel p { margin: 0; color: #d0cab8; font-size: 13px; line-height: 1.55; }
-  #tutorial-panel button { color: #e9dfbf; background: transparent; border: 0; cursor: pointer; }
-  #tutorial-close { font-size: 22px; line-height: 1; }
-  #tutorial-skip { margin-top: 11px; padding: 0; font: 10px/1.2 ui-monospace, Menlo, Consolas, monospace; text-transform: uppercase; letter-spacing: .06em; opacity: .72; }
-  #tutorial-panel .tutorial-meter { height: 3px; margin-top: 14px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.12); }
-  #tutorial-meter-fill { display: block; width: 0; height: 100%; background: #e7cf87; transition: width .35s ease; }
+  #tutorial-panel .tutorial-topline {
+    display: flex; justify-content: space-between; align-items: center;
+    color: var(--ink-soft); font-size: 10px; text-transform: uppercase; letter-spacing: .09em;
+  }
+  #tutorial-panel h2 { margin: 9px 0 6px; font: 600 19px/1.15 var(--serif); color: var(--ink); }
+  #tutorial-panel p { margin: 0; font-size: 13px; line-height: 1.5; color: #4c4235; }
+  #tutorial-panel button { background: transparent; border: 0; padding: 0; color: var(--ink-soft); }
+  #tutorial-panel button:hover { background: transparent; color: var(--gold); }
+  #tutorial-close { font-size: 20px; line-height: 1; }
+  #tutorial-skip { margin-top: 11px; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; }
+  #tutorial-panel .tutorial-meter {
+    height: 3px; margin-top: 12px; overflow: hidden; border-radius: 99px; background: var(--edge-soft);
+  }
+  #tutorial-meter-fill { display: block; width: 0; height: 100%; background: var(--gold); transition: width .35s ease; }
 
-  #build-id {
-    position: fixed; right: 10px; top: 10px; z-index: 40; pointer-events: none;
-    padding: 4px 7px; border-radius: 5px; color: rgba(255,255,255,.82);
-    background: rgba(12,15,13,.58); font: 10px/1.2 ui-monospace, Menlo, Consolas, monospace;
-    letter-spacing: .03em; backdrop-filter: blur(4px);
+  /* ------------------------------------------------ the controls reference */
+  /* The old keybinding wall, on demand: one keypress (?) or one button, and it
+     covers the battlefield only while it is being read. */
+  #controls-sheet {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(760px, calc(100vw - 40px)); max-height: min(86vh, 700px);
+    overflow-y: auto; display: none; padding: 20px 24px; z-index: var(--z-sheet);
+  }
+  #controls-sheet.visible { display: block; }
+  #controls-sheet .sheet-head { display: flex; justify-content: space-between; align-items: baseline; }
+  #controls-sheet h2 { margin: 0; font: 600 21px/1.2 var(--serif); }
+  #controls-sheet .sheet-close { font-size: 22px; line-height: 1; padding: 0 6px; border: 0; background: transparent; color: var(--ink-soft); }
+  #controls-sheet .sheet-close:hover { background: transparent; color: var(--gold); }
+  #controls-sheet .sheet-lead { margin: 4px 0 14px; font-size: 12px; color: var(--ink-soft); }
+  /* Two columns, not three. At three the description column is narrow enough
+     that a five-word binding wraps to four lines and the sheet stops being
+     scannable, which is the only thing a reference has to be. */
+  #controls-sheet .groups {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px 26px;
+  }
+  #controls-sheet h4 {
+    margin: 0 0 5px; font: 600 11px/1.2 var(--serif);
+    letter-spacing: .1em; text-transform: uppercase; color: var(--gold);
+  }
+  #controls-sheet dl { margin: 0; display: grid; grid-template-columns: minmax(0, auto) 1fr; gap: 4px 10px; font-size: 12px; line-height: 1.4; }
+  #controls-sheet dt { text-align: right; white-space: nowrap; }
+  #controls-sheet dd { margin: 0; color: #4c4235; }
+  #controls-sheet kbd {
+    display: inline-block; padding: 1px 5px; border-radius: 5px; font: 600 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    background: var(--gold-fill); border: 1px solid var(--edge-soft); color: var(--ink);
+  }
+  #controls-sheet .sheet-foot { margin: 16px 0 0; font-size: 12px; color: var(--ink-soft); }
+  #controls-settings {
+    display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    margin: 0 0 16px; padding: 11px 0;
+    border-top: 1px solid var(--edge-soft); border-bottom: 1px solid var(--edge-soft);
+  }
+  #quality-control { display: flex; gap: 7px; align-items: center; font-size: 12px; }
+  #quality-control span { color: var(--ink-soft); }
+
+  /* ---------------------------------------------------- smaller viewports */
+  /* Panels are fixed-size objects, so on a 1280x800 laptop they eat a bigger
+     share of the screen than on a 1080p display for no design reason. Tighten
+     the whole console at once by moving the four layout numbers. */
+  @media (max-width: 1500px), (max-height: 900px) {
+    :root {
+      --gutter: 10px;
+      /* Width holds: five buttons have to fit a single row at every size. */
+      --card-h: 110px;
+      --col-w: 186px;  --map-h: 172px;
+    }
+    #res { gap: 12px; padding: 5px 13px; }
+    #res .big { font-size: 17px; }
+    #chain { width: 226px; }
+    #tutorial-panel { top: 52px; width: min(276px, calc(100vw - 20px)); }
   }
 
+  /* ===================================================================
+     Developer scaffolding. Nothing below this line exists without ?dev=.
+     Kept in monospace deliberately: if a player ever sees a mono panel,
+     something has leaked.
+     =================================================================== */
+  #debug {
+    top: 56px; right: var(--gutter); min-width: 206px; z-index: var(--z-dev);
+    font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    background-color: rgba(12, 15, 13, .82); background-image: none;
+    color: #e8e2cf; border-color: rgba(232, 219, 177, .26);
+  }
+  #debug h4 { margin: 0 0 6px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #b9b19a; }
+  #debug .row { display: flex; justify-content: space-between; gap: 16px; }
+  #debug .k { color: #9d9683; }
+  #debug .warn { color: #ff9b8a; font-weight: 700; }
+
+  #dev-sandbox {
+    right: var(--gutter); bottom: var(--gutter); width: 280px; z-index: var(--z-dev);
+    font-size: 12px;
+  }
+  #dev-sandbox h3 { margin: 0 0 6px; }
+  #dev-sandbox .dev-mode { margin-bottom: 8px; color: var(--ink-soft); }
+  #dev-sandbox .dev-row { display: flex; gap: 6px; margin: 6px 0; flex-wrap: wrap; }
+  #dev-sandbox .dev-replay { margin: 8px 0; padding: 8px; border: 1px solid var(--edge-soft); border-radius: 8px; background: rgba(255,255,255,.4); }
+  #dev-sandbox .dev-timeline-label { display: grid; gap: 5px; color: var(--ink-soft); }
+  #dev-sandbox .dev-timeline-label input { width: 100%; accent-color: var(--legacy); }
+  #dev-sandbox .dev-readout {
+    margin: 8px 0 4px; padding: 8px; min-width: 300px; white-space: pre-wrap; line-height: 1.45;
+    border-radius: 6px; background: rgba(35, 31, 25, .07);
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  #dev-sandbox small { color: var(--ink-soft); line-height: 1.35; display: block; }
+
+  /* Dev mode adds two more panels to a right edge that already holds two. Stack
+     all four top-down from fixed offsets rather than letting the sandbox sit on
+     top of the map, which is what happened before. */
+  body.dev-mode #research {
+    top: calc(var(--gutter) + 222px); bottom: auto; max-height: 160px;
+  }
+  body.dev-mode #minimap-wrap { top: calc(var(--gutter) + 392px); bottom: auto; }
+  body.dev-mode #dev-sandbox {
+    top: calc(var(--gutter) + 402px + var(--map-h)); bottom: var(--gutter);
+    overflow-y: auto;
+  }
 </style>
 </head>
 <body>
-<div id="hud" class="panel">
-  <b>Phase 1.7 — Squads &amp; Behaviour Chains</b><br>
-  Left-click / drag: select &middot; Right-click ground: move<br>
-  <b>Right-click a resource node with workers selected:</b><br>
-  &nbsp;&nbsp;they gather forever, no further input<br>
-  Select the Standard: <b>Q</b> worker &middot; <b>E</b> legionnaire<br>
-  Select a worker, <b>B</b>: build outpost, click to site it<br>
-  Worker walks there and builds &middot; pull it off and it <b>pauses</b><br>
-  <b>Ctrl+1…5</b> forms a squad &middot; <b>1…5</b> selects it<br>
-  Pick a behaviour, click the map to place that step, hit Run<br>
-  WASD / edge-scroll: pan &middot; Scroll: zoom &middot; Middle-drag: orbit<br>
-  <b>A</b>: attack-move &middot; <b>P</b>: patrol &middot; <b>S</b>: stop &middot; <b>H</b>: hold<br>
-  <b>Home</b>: frame whole board &middot; <b>T</b>: throttle test &middot; <b>G</b>: select all workers
+
+<!-- Settings and help. Not commands: the one place a player leaves the game. -->
+<div id="tools" class="panel">
+  <button id="tutorial-launcher" type="button" title="Walk through the first commands">Guide</button>
+  <button id="controls-toggle" type="button" title="Controls and settings (?)">Keys</button>
 </div>
+
+<!-- The state of the war, read-only. -->
 <div id="res" class="panel">
   <div><span class="big" id="r-essence">0</span> <span class="sub">essence</span></div>
-  <div><span id="r-gathering">0</span>/<span id="r-workers">0</span> <span class="sub">workers gathering</span></div>
+  <div><span id="r-gathering">0</span>/<span id="r-workers">0</span> <span class="sub">gathering</span></div>
+  <div class="rule"></div>
   <div><span class="big" id="r-supply">0/0</span> <span class="sub">command</span></div>
   <div><span class="big" id="r-chains">0/0</span> <span class="sub">chains</span></div>
+  <div class="rule"></div>
   <div><span id="r-remaining">0</span> <span class="sub">left on map</span></div>
   <div id="clock">
     <span id="c-dial" class="dial"></span>
@@ -206,35 +410,40 @@
     <span class="sub" id="c-period">day</span>
   </div>
 </div>
-<div id="card" class="panel">
-  <h3 id="card-title">Nothing selected</h3>
-  <div class="btns" id="card-btns"></div>
-  <div class="queue" id="card-queue"></div>
-  <div class="hint" id="card-hint"></div>
-</div>
+
+<!-- Right column: what to learn, and where everything is. -->
 <div id="research" class="panel">
   <h3>Research</h3>
   <div id="research-progress" hidden></div>
   <div id="research-body"></div>
 </div>
+<div id="minimap-wrap" class="panel" aria-label="Tactical map">
+  <div id="map-seed-control">
+    <span>Map</span>
+    <input aria-label="Map seed" inputmode="numeric">
+    <button data-action="apply">Load</button>
+    <button data-action="random">New</button>
+  </div>
+  <canvas id="minimap"></canvas>
+</div>
+
+<!-- Bottom console: who you have, and what they are about to do. -->
 <div id="chain" class="panel">
   <h3 id="chain-title">Squads</h3>
   <div class="squads" id="chain-squads"></div>
   <div id="chain-body"></div>
 </div>
-<div id="flash" class="panel"></div>
-<div id="debug" class="panel">
-  <h4>Debug</h4>
-  <div class="row"><span class="k">render fps</span><span id="d-fps">—</span></div>
-  <div class="row"><span class="k">sim ticks/s</span><span id="d-tps">—</span></div>
-  <div class="row"><span class="k">tick</span><span id="d-tick">—</span></div>
-  <div class="row"><span class="k">essence/min</span><span id="d-rate">—</span></div>
-  <div class="row"><span class="k">units</span><span id="d-units">—</span></div>
-  <div class="row"><span class="k">selected</span><span id="d-sel">—</span></div>
-  <div class="row"><span class="k">throttle</span><span id="d-throttle">off</span></div>
+<div id="card" class="panel">
+  <div class="top">
+    <h3 id="card-title">Nothing selected</h3>
+    <div class="queue" id="card-queue"></div>
+  </div>
+  <div class="btns" id="card-btns"></div>
+  <div class="hint" id="card-hint"></div>
 </div>
+
+<div id="flash" class="panel"></div>
 <div id="selbox"></div>
-<div id="minimap-wrap" aria-label="Tactical map"><div id="map-seed-control"><span>Map</span><input aria-label="Map seed" inputmode="numeric"><button data-action="apply">Load</button><button data-action="random">New</button></div><canvas id="minimap"></canvas></div>
 
 <script type="module" src="/src/main.ts"></script>
 </body>

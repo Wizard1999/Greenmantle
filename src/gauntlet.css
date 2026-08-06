@@ -1,0 +1,206 @@
+/* Gauntlet page ------------------------------------------------------------
+   A reading surface, not a dashboard. Same palette and type as the public
+   development page so the two read as one project, but stripped of glass,
+   reveal animation and decoration: this page is judged on whether its prose is
+   legible at length, and everything else is in the way of that.            */
+
+:root {
+  --void: #0b0b0b;
+  --bone: #f3ecd8;
+  --bone-dim: #b9b3a5;
+  --muted: #857f72;
+  --gold: #e7cf87;
+  --legacy: #b98ad9;
+  --rule: rgba(255, 255, 255, 0.09);
+
+  --font-display: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Inter, sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+body.gauntlet {
+  margin: 0;
+  background: var(--void);
+  color: var(--bone-dim);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.62;
+  -webkit-font-smoothing: antialiased;
+}
+
+.gauntlet-shell {
+  width: min(880px, 92vw);
+  margin-inline: auto;
+  padding: clamp(2.4rem, 7vw, 5rem) 0 6rem;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: .86em;
+  padding: .1em .36em;
+  border-radius: 5px;
+  background: rgba(185, 138, 217, .14);
+  color: #e0cdf2;
+}
+
+a { color: var(--gold); text-decoration-color: rgba(231, 207, 135, .4); text-underline-offset: 3px; }
+a:hover { text-decoration-color: var(--gold); }
+
+strong { color: var(--bone); font-weight: 600; }
+em { color: var(--bone); font-style: italic; }
+
+/* ---- Head ---------------------------------------------------------------- */
+.gauntlet-head h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(2.1rem, 6vw, 3.5rem);
+  line-height: 1.04;
+  color: var(--bone);
+  letter-spacing: -0.01em;
+}
+.gauntlet-lede {
+  margin: 1.2rem 0 0;
+  max-width: 62ch;
+  font-size: 1.02rem;
+}
+.gauntlet-state {
+  margin: 1.9rem 0 0;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+.gauntlet-state.is-error { color: #ff9d8a; }
+
+/* ---- Blocks -------------------------------------------------------------- */
+.gauntlet-block { margin-top: clamp(2.8rem, 6vw, 4.4rem); }
+.gauntlet-block > h2 {
+  margin: 0 0 1rem;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: clamp(1.35rem, 3.2vw, 1.85rem);
+  color: var(--bone);
+}
+.gauntlet-block > p { margin: 0; max-width: 68ch; }
+.gauntlet-block > p.sub { color: var(--muted); font-size: .9rem; margin-bottom: 1.6rem; }
+
+/* ---- Pieces -------------------------------------------------------------- */
+.piece-list { display: grid; }
+.piece {
+  padding: 1.9rem 0;
+  border-top: 1px solid var(--rule);
+}
+.piece:last-child { border-bottom: 1px solid var(--rule); }
+
+.piece-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+.piece-head h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.3rem;
+  color: var(--bone);
+}
+.piece-bar {
+  margin: .35rem 0 0;
+  max-width: 58ch;
+  font-size: .88rem;
+  color: var(--muted);
+}
+
+/* The status is a word, not a colour to decode. Colour reinforces; it never
+   carries the meaning alone. */
+.piece-status {
+  flex: none;
+  padding: .38rem .8rem;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.piece[data-state='building'] .piece-status,
+.piece[data-state='critique'] .piece-status { color: var(--gold); border-color: rgba(231, 207, 135, .55); }
+.piece[data-state='sent-back'] .piece-status { color: #ffab8f; border-color: rgba(255, 171, 143, .5); }
+.piece[data-state='passed'] .piece-status { color: #9ccf7c; border-color: rgba(156, 207, 124, .45); }
+.piece[data-state='blocked'] .piece-status { color: #ff9d8a; border-color: rgba(255, 157, 138, .5); }
+
+.piece p { margin: 1.05rem 0 0; max-width: 68ch; }
+.piece p:first-of-type { margin-top: 1.3rem; }
+
+/* ---- Gates --------------------------------------------------------------- */
+.gates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.4rem;
+  padding: 1.8rem 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+.gates h3 {
+  margin: 0 0 .8rem;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  font-size: .72rem;
+  letter-spacing: .1em;
+  color: var(--muted);
+}
+.gates ul { margin: 0; padding-left: 1.05rem; display: grid; gap: .45rem; }
+.gates li { font-size: .9rem; }
+
+/* ---- Held back ----------------------------------------------------------- */
+.held-list { margin: 0; display: grid; grid-template-columns: minmax(9rem, auto) 1fr; gap: .9rem 1.6rem; }
+.held-list dt {
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  color: var(--legacy);
+  padding-top: .12rem;
+}
+.held-list dd { margin: 0; font-size: .92rem; max-width: 60ch; }
+
+/* ---- Rounds -------------------------------------------------------------- */
+.round-list { display: grid; }
+.round {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: 1.6rem;
+  padding: 1.9rem 0;
+  border-top: 1px solid var(--rule);
+}
+.round:last-child { border-bottom: 1px solid var(--rule); }
+.round-label {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: .76rem;
+  color: var(--muted);
+  padding-top: .28rem;
+}
+.round-body p { margin: 0 0 1rem; max-width: 66ch; }
+.round-body p:last-child { margin-bottom: 0; }
+
+/* ---- Foot ---------------------------------------------------------------- */
+.gauntlet-foot {
+  margin-top: 4rem;
+  padding-top: 1.6rem;
+  border-top: 1px solid var(--rule);
+  font-size: .85rem;
+  color: var(--muted);
+}
+.gauntlet-foot p { margin: 0; }
+
+@media (max-width: 720px) {
+  .gates { grid-template-columns: 1fr; gap: 1.6rem; }
+  .held-list { grid-template-columns: 1fr; gap: .25rem 0; }
+  .held-list dd { margin-bottom: 1rem; }
+  .round { grid-template-columns: 1fr; gap: .6rem; }
+  .piece-head { flex-direction: column; gap: .8rem; }
+}

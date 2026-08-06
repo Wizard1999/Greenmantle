@@ -275,6 +275,59 @@ p { margin: .9rem 0 0; color: var(--bone-dim); }
 .milestone-list span { font-family: var(--font-mono); font-size: .68rem; color: var(--gold); }
 .milestone-list p { margin: 0; font-size: .87rem; }
 
+/* ---- Work log -----------------------------------------------------------
+   The live view of the gauntlet, published from docs/WORKLOG.md. Deliberately
+   the same glass/mono/gold language as the progress panel above it — this is
+   the same subject at finer grain, not a second design.                     */
+.worklog { display: grid; grid-template-columns: 1.35fr 1fr; gap: 1rem; align-items: stretch; }
+.worklog-now, .worklog-gap { padding: clamp(1.4rem, 3vw, 2.1rem); }
+
+.worklog-now-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.worklog-now-head .eyebrow { margin: 0; }
+.worklog-now h3 { margin: .7rem 0 0; font-size: clamp(1.3rem, 2.6vw, 1.85rem); }
+
+/* Status is a fact about the slice, so it is a readable word, not a colour the
+   reader has to decode. Colour only reinforces it. */
+.worklog-status {
+  font-family: var(--font-mono); font-size: .62rem; letter-spacing: .18em;
+  text-transform: uppercase; padding: .34rem .6rem; border-radius: 999px;
+  color: var(--gold); background: rgba(255, 217, 160, .1);
+  border: 1px solid var(--edge-hot); white-space: nowrap;
+}
+.worklog-status[data-state='queued'] { color: var(--muted); background: rgba(255,255,255,.04); border-color: var(--edge); }
+.worklog-status[data-state='passed'] { color: var(--moss); background: rgba(127, 174, 92, .12); border-color: rgba(127, 174, 92, .4); }
+.worklog-status[data-state='blocked'] { color: #ff9d8a; background: rgba(255, 157, 138, .1); border-color: rgba(255, 157, 138, .38); }
+
+.worklog-bar { margin: .9rem 0 0; font-size: .92rem; color: #cdd3e0; line-height: 1.6; }
+.worklog-session { font-family: var(--font-mono); font-size: .68rem; color: var(--muted); margin-top: 1.6rem; }
+
+.worklog-gap .eyebrow { color: var(--gold); }
+.worklog-gap p { font-size: .95rem; line-height: 1.65; }
+
+/* The link onward is the point of this block: the development page carries the
+   headline, /gauntlet.html carries the record. Two accounts of the same build
+   that can disagree is worse than one that is a click away. */
+.worklog-more {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.1rem;
+  margin-top: 1.4rem; padding: 1.1rem 1.3rem; border-radius: var(--r-md);
+  background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
+}
+.worklog-more a { color: var(--gold); text-decoration: none; font-weight: 600; font-size: .95rem; }
+.worklog-more a:hover { text-decoration: underline; }
+.worklog-more span { color: var(--muted); font-size: .84rem; }
+
+.worklog-bar code, .worklog-gap code {
+  font-family: var(--font-mono); font-size: .84em; padding: .1em .38em;
+  border-radius: 5px; background: rgba(185, 138, 217, .13); color: #e0cdf2;
+}
+.worklog-bar strong, .worklog-gap strong { color: var(--bone); font-weight: 600; }
+
+.hero-stats [data-test-count].is-red { color: #ff9d8a; }
+
+@media (max-width: 900px) {
+  .worklog { grid-template-columns: 1fr; }
+}
+
 /* ---- Full roadmap -------------------------------------------------------- */
 .roadmap-document {
   margin-top: 3rem;

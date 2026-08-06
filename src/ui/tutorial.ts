@@ -86,18 +86,37 @@ export function createTutorial(world: World, ui: TutorialUiState): TutorialContr
     unit => unit.team === 'player' && unit.type === 'legionnaire',
   ).length;
   const actions = new Set<TutorialAction>();
-  let active = new URLSearchParams(window.location.search).get('tutorial') === '1';
+  const params = new URLSearchParams(window.location.search);
+
+  /**
+   * A first-time player gets the guide without asking for it.
+   *
+   * This replaces the permanent keybinding wall (D-032). The wall was help that
+   * nobody could turn off; this is help that arrives once, at the only moment
+   * it is wanted, and then stays behind the Guide button forever. `?tutorial=1`
+   * still forces it for testing, and any recorded outcome — completed or
+   * skipped — suppresses the automatic open.
+   */
+  const seen = (() => {
+    try { return localStorage.getItem(STORAGE_KEY) !== null; } catch { return false; }
+  })();
+  let active = params.get('tutorial') === '1' || (params.get('tutorial') !== '0' && !seen);
   let lastStep = -1;
 
-  const launcher = document.createElement('button');
-  launcher.id = 'tutorial-launcher';
-  launcher.type = 'button';
-  launcher.textContent = 'Tutorial';
-  launcher.title = 'Start the guided RTS introduction';
-  document.body.appendChild(launcher);
+  // The launcher lives in the tools pill in `index.html` so the top-left corner
+  // is one object; falling back to <body> keeps this module usable on a page
+  // that has no tools bar (the tests' bare DOM, for one).
+  const existing = document.getElementById('tutorial-launcher');
+  const launcher = existing instanceof HTMLButtonElement
+    ? existing
+    : document.body.appendChild(Object.assign(document.createElement('button'), {
+        id: 'tutorial-launcher', type: 'button', textContent: 'Guide',
+      }));
+  launcher.title = 'Walk through the first commands';
 
   const panel = document.createElement('section');
   panel.id = 'tutorial-panel';
+  panel.className = 'panel';
   panel.setAttribute('aria-live', 'polite');
   panel.innerHTML = `
     <div class="tutorial-topline">
@@ -125,7 +144,14 @@ export function createTutorial(world: World, ui: TutorialUiState): TutorialContr
 
   function setVisible(visible: boolean): void {
     panel.classList.toggle('visible', visible);
-    launcher.classList.toggle('hidden', visible);
+    // The launcher stays put and lights up instead of vanishing: a control that
+    // disappears when used cannot be used to put the thing away again.
+    launcher.classList.toggle('on', visible);
+    launcher.setAttribute('aria-expanded', String(visible));
+  }
+
+  function remember(outcome: string): void {
+    try { localStorage.setItem(STORAGE_KEY, outcome); } catch { /* private mode */ }
   }
 
   function start(): void {
@@ -139,12 +165,10 @@ export function createTutorial(world: World, ui: TutorialUiState): TutorialContr
     setVisible(false);
   }
 
-  launcher.addEventListener('click', start);
-  close.addEventListener('click', stop);
-  skip.addEventListener('click', () => {
-    localStorage.setItem(STORAGE_KEY, 'skipped');
-    stop();
-  });
+  launcher.addEventListener('click', () => { if (active) stop(); else start(); });
+  // Closing is a decision too — record it, or the guide reopens on every load.
+  close.addEventListener('click', () => { remember('dismissed'); stop(); });
+  skip.addEventListener('click', () => { remember('skipped'); stop(); });
 
   function snapshot(): TutorialSnapshot {
     const selected = world.units.filter(unit => unit.team === 'player' && unit.selected);
@@ -177,7 +201,7 @@ export function createTutorial(world: World, ui: TutorialUiState): TutorialContr
       body.textContent = 'Gather, build, form squads, and destroy the rival Standard. You can reopen this guide at any time.';
       fill.style.width = '100%';
       skip.textContent = 'Close';
-      localStorage.setItem(STORAGE_KEY, 'complete');
+      remember('complete');
       return;
     }
     if (stepIndex === lastStep) return;

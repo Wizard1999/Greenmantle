@@ -36,10 +36,14 @@ import { FogOfWarField, playerVisionSources } from './ui/fogOfWar';
 import { createVisibilityController, visibilityModeFromSearch } from './ui/visibility';
 import { createFogOverlay } from './render/fogOverlay';
 import { createTutorial } from './ui/tutorial';
+import { mountControlsSheet } from './ui/controlsSheet';
 import { Recorder } from './sim/replay';
 import { configureLiveRecording, issueCommand } from './replay/live';
 
 void mountBuildBadge();
+// Before anything that mounts into it: the sheet hosts the settings block that
+// `mountQualityControl` looks for, and the `?` binding a player may hit at once.
+mountControlsSheet();
 
 // Opt in to the opponent explicitly — a bare world is inert (see sim/world.ts).
 const MATCH_SEED = 1337;
@@ -49,6 +53,10 @@ const MAP_SEED = Number.isSafeInteger(requestedMapSeed) ? requestedMapSeed : MAT
 const world = enableAi(buildTestMap(createWorld(MATCH_SEED, MATCH_START_HOUR, MAP_SEED)));
 const recorder = new Recorder(MATCH_SEED, MATCH_START_HOUR, MAP_SEED, 'standardAi');
 configureLiveRecording(world, recorder);
+
+// Hoisted: the render callback ran `new THREE.Color(0x000000)` every frame,
+// allocating a throwaway object 60 times a second for a constant.
+const VOID_BACKGROUND = new THREE.Color(0x000000);
 
 const quality = QUALITY[detectTier()];
 mountQualityControl(quality.tier);
@@ -196,13 +204,16 @@ const loop = createLoop({
     // Drive the whole sky from the sim clock, so what the player sees and
     // what a replay records are the same time of day.
     const sky = sampleSky(world);
-    updatePainterlyGlobals(now, quality.cloudShadows ? 0.28 * sky.light : 0, sky);
+    // Seconds, not the raw rAF timestamp: the drift constants are per-second,
+    // and feeding milliseconds pushed the cloud-noise hash past float32
+    // precision within seconds of load, flickering the whole ground.
+    updatePainterlyGlobals(now / 1000, quality.cloudShadows ? 0.28 * sky.light : 0, sky);
     sun.position.copy(sky.sunDir).multiplyScalar(60);
     sun.color.copy(sky.sunColor);
     sun.intensity = 0.35 + sky.light * 1.65;
     // The terrain is a physical table suspended in an unlit void. Day/night
     // still drives surface lighting, but never paints a conventional sky dome.
-    scene.background = new THREE.Color(0x000000);
+    scene.background = VOID_BACKGROUND;
     renderer.toneMappingExposure = 0.85 + sky.light * 0.3;
     cam.pan(realDt, keyboard.keys, keyboard.mouseX, keyboard.mouseY);
     cam.update();
@@ -230,3 +241,22 @@ const loop = createLoop({
 const sandbox = createSandbox({ world, loop, camera: cam, renderer, ui, scene, quality, recorder, visibility });
 cam.update();
 loop.start();
+
+/**
+ * Automation handle for the screenshot harness (`npm run capture`).
+ *
+ * Gated behind `?capture=1` so it cannot exist in a build a player loads —
+ * a global that hands out the mutable `World` is a cheat console otherwise.
+ * Deliberately not `?dev=`: the sandbox is a human tool with its own panel, and
+ * conflating the two means a change to one silently alters the other.
+ *
+ * Everything here is read-or-drive, never a new capability: `loop` already
+ * exposes pause/step publicly so the sandbox can single-tick, and the camera is
+ * driven through the same `focusAt`/`orbit` calls the mouse uses. The harness
+ * therefore photographs the real game rather than a special rendering path.
+ */
+if (new URLSearchParams(window.location.search).has('capture')) {
+  (window as unknown as { __greenmantle?: unknown }).__greenmantle = {
+    world, loop, cam, quality, ui, renderer,
+  };
+}

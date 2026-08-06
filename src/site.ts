@@ -7,12 +7,29 @@ type Phase = {
   benchmark: string;
 };
 
+/**
+ * A summary of the gauntlet from `docs/WORKLOG.md` — the full record lives on
+ * `/gauntlet.html`. Only the fields this page shows are declared; the rest of
+ * the payload is that page's business. Text fields arrive as inline HTML from
+ * the sync script, which escapes before it formats.
+ */
+type Worklog = {
+  round: string;
+  state: string;
+  scope: string;
+  pieces: { title: string; bar: string; status: string }[];
+};
+
+type Verification = { tests: number; passed: number; files: number; green: boolean };
+
 type ProgressData = {
   overall: number;
   updated: string;
   currentWork: string[];
   phases: Phase[];
   milestones: string[];
+  worklog: Worklog | null;
+  verification: Verification | null;
   roadmapHtml: string;
 };
 
@@ -74,6 +91,8 @@ const fallback: ProgressData = {
   ],
   phases: [],
   milestones: [],
+  worklog: null,
+  verification: null,
   roadmapHtml: '<p>The full roadmap could not be loaded. Open <code>docs/ROADMAP.md</code> in the repository.</p>',
 };
 
@@ -127,8 +146,61 @@ function renderProgress(data: ProgressData): void {
   }
 
 
+  renderVerification(data.verification);
+  renderWorklog(data.worklog);
+
   const roadmap = document.querySelector<HTMLElement>('[data-full-roadmap]');
   if (roadmap) roadmap.innerHTML = data.roadmapHtml;
+}
+
+/**
+ * The test count comes from the machine or it does not appear.
+ *
+ * This page tells the reader it "cannot flatter the build". The figure was
+ * previously typed into the markup and drifted to 269 while the suite stood at
+ * 340 — the exact flattery the sentence disclaims. `.verify/tests.json` is
+ * written by `npm test`; with no run to cite, show an em dash and say so.
+ */
+function renderVerification(verification: Verification | null): void {
+  const count = document.querySelector<HTMLElement>('[data-test-count]');
+  if (!count) return;
+  if (!verification) {
+    count.textContent = '—';
+    count.title = 'No test run recorded yet. Run npm test.';
+    return;
+  }
+  count.textContent = String(verification.passed);
+  count.title = `${verification.passed} of ${verification.tests} across `
+    + `${verification.files} files — ${verification.green ? 'suite green' : 'SUITE RED'}`;
+  if (!verification.green) count.classList.add('is-red');
+}
+
+/**
+ * The headline only: which piece is on the bench, what it is judged against,
+ * and what "finishing" means. The full record — every piece, every critic
+ * verdict, everything held back — is `/gauntlet.html`, which reads the same
+ * payload. Duplicating it here would give the project two accounts of itself
+ * that could disagree.
+ */
+function renderWorklog(worklog: Worklog | null): void {
+  if (!worklog) return;
+  const set = (selector: string, value: string, asHtml = false): void => {
+    const el = document.querySelector<HTMLElement>(selector);
+    if (!el) return;
+    if (asHtml) el.innerHTML = value; else el.textContent = value;
+  };
+
+  // The piece being worked is the first one not queued; failing that, the first.
+  const active = worklog.pieces.find((piece) => !/queued/i.test(piece.status)) ?? worklog.pieces[0];
+
+  set('[data-worklog-piece]', active?.title ?? '');
+  set('[data-worklog-bar]', active?.bar ? `Bar — ${active.bar}` : '', true);
+  set('[data-worklog-status]', active?.status ?? '');
+  set('[data-worklog-scope]', worklog.scope, true);
+  set('[data-worklog-state]', `Round ${worklog.round} · ${worklog.state}`);
+
+  const status = document.querySelector<HTMLElement>('[data-worklog-status]');
+  if (status && active) status.dataset['state'] = active.status.toLowerCase().replace(/\s+/g, '-');
 }
 
 function escapeHtml(value: string): string {
@@ -143,18 +215,56 @@ fetch('./data/progress.json')
     return response.json() as Promise<ProgressData>;
   })
   .then(renderProgress)
-  .catch(() => renderProgress(fallback));
+  .catch(() => renderProgress(fallback))
+  // Sections below the progress panel have just moved. Put the reader back on
+  // the anchor they asked for. Declared after renderProgress so the layout is
+  // final when it runs.
+  .finally(() => requestAnimationFrame(() => honourHash()));
 
-const observer = new IntersectionObserver((entries) => {
-  for (const entry of entries) {
-    if (entry.isIntersecting) {
-      entry.target.classList.add('is-visible');
-      observer.unobserve(entry.target);
+// Scroll reveal ------------------------------------------------------------
+// Everything with .reveal starts at opacity 0, so anything this misses is not
+// merely un-animated — it is invisible. Two ways that happened:
+//
+//   1. Reduced-motion users got the animation regardless.
+//   2. Deep links landed on a blank screen. The hero art carries no intrinsic
+//      size, so the page grows after the browser has already jumped to the
+//      hash; /development.html#worklog left the reader at scrollY 3601 with
+//      the section at 5393, in a gap between sections where nothing had
+//      intersected yet.
+//
+// Reveal honestly, then re-honour the hash once layout has settled.
+const revealTargets = [...document.querySelectorAll('.reveal')];
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+if (prefersReducedMotion) {
+  for (const element of revealTargets) element.classList.add('is-visible');
+} else {
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      }
     }
-  }
-}, { threshold: 0.12 });
+  }, { threshold: 0.12, rootMargin: '0px 0px -4% 0px' });
 
-document.querySelectorAll('.reveal').forEach((element) => observer.observe(element));
+  for (const element of revealTargets) observer.observe(element);
+}
+
+function honourHash(): void {
+  if (!window.location.hash) return;
+  document.querySelector(window.location.hash)?.scrollIntoView({ block: 'start' });
+}
+
+window.addEventListener('hashchange', honourHash);
+
+// The browser jumps to the hash at parse time, but the progress panel *above*
+// the work log is empty until the fetch resolves — injecting its phase and
+// milestone rows then pushes every later section down, and the reader is left
+// somewhere in a gap. Images are not the cause; the CSS already reserves their
+// space with aspect-ratio. Re-anchor once the injected content has landed, and
+// stop the browser restoring a stale offset over the top of it.
+if (window.location.hash && 'scrollRestoration' in history) history.scrollRestoration = 'manual';
 
 const header = document.querySelector<HTMLElement>('[data-header]');
 window.addEventListener('scroll', () => header?.classList.toggle('is-scrolled', window.scrollY > 24), { passive: true });

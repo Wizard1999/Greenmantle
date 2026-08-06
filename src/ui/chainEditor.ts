@@ -71,8 +71,10 @@ export function createChainEditor(
       title.textContent = 'Squads';
       const p = document.createElement('div');
       p.className = 'empty-state';
-      p.textContent = 'Select units and press Ctrl+1 to form a squad. '
-        + 'Squads persist, hold a behaviour chain, and keep running it until you redirect them.';
+      // One line. The long explanation of what a squad *is* moved to the guide
+      // and the control sheet (D-032) — the console states facts, it does not
+      // teach, and three lines of tuition sat here for the whole match.
+      p.textContent = 'Select units, then Ctrl+1 to form a squad.';
       body.appendChild(p);
       return;
     }

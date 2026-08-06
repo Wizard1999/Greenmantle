@@ -7,6 +7,9 @@ interface BuildInfo {
 export async function mountBuildBadge(): Promise<void> {
   const badge = document.createElement('div');
   badge.id = 'build-id';
+  // Without the shared class it had no positioning at all and laid out as a
+  // full-width static block behind the top of the HUD (D-032).
+  badge.className = 'panel';
   badge.textContent = 'build …';
   document.body.appendChild(badge);
   try {

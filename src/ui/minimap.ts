@@ -1,10 +1,14 @@
 import type { World } from '../core/types';
+import { groundViewPolygon } from '../render/cameraMath';
 import { clampPointToMapBoundary, type MapBoundary } from '../sim/mapBoundary';
 import { FogOfWarField } from './fogOfWar';
 import type { VisibilityController } from './visibility';
 
 export interface MinimapCamera {
-  readonly state: { focusX: number; focusZ: number; yaw: number; distance: number };
+  readonly state: { focusX: number; focusZ: number; yaw: number; pitch: number; distance: number };
+  /** Vertical field of view in radians, and viewport aspect — needed to draw
+   *  what the camera actually covers rather than only where it is. */
+  readonly lens: { fov: number; aspect: number };
   focusAt: (x: number, z: number) => void;
 }
 
@@ -31,6 +35,24 @@ export function minimapWorldToCanvas(t: MinimapTransform, x: number, z: number):
 
 export function minimapCanvasToWorld(t: MinimapTransform, x: number, y: number): { x: number; z: number } {
   return { x: (x - t.offsetX) / t.scale, z: -(y - t.offsetY) / t.scale };
+}
+
+/**
+ * Canvas rotation that makes an up-pointing marker face where the camera is
+ * actually looking.
+ *
+ * Two sign flips have to survive between the camera and this canvas, and
+ * getting one of them wrong is invisible half the time — which is how the
+ * previous `-yaw` lasted. `cameraOffset` places the camera at
+ * `focus + (sin yaw, cos yaw)·h`, so it looks back along `(-sin yaw, -cos yaw)`
+ * in world XZ. This canvas maps `+z` to *negative* Y, so that direction becomes
+ * `(-sin yaw, +cos yaw)` on screen. Rotating `(0, -1)` onto that needs
+ * `yaw + π`, not `-yaw`: the two agree whenever `cos yaw` is 0, so the marker
+ * looked right facing east or west and pointed exactly backwards facing north
+ * or south.
+ */
+export function minimapHeadingRotation(yaw: number): number {
+  return yaw + Math.PI;
 }
 
 export interface Minimap {
@@ -93,14 +115,54 @@ export function createMinimap(
     context.fill();
   }
 
+  /**
+   * What the camera actually covers, plus which way it faces.
+   *
+   * The footprint carries the information; the heading tick only disambiguates
+   * it. A trapezoid alone is nearly symmetric when the camera looks steeply
+   * down, so at high pitch there is no way to tell near edge from far — the
+   * tick resolves that in one glyph rather than asking the player to infer it
+   * from which end is wider.
+   */
+  function drawViewport(): void {
+    const polygon = groundViewPolygon(
+      camera.state, camera.lens.fov, camera.lens.aspect,
+    ).map(p => minimapWorldToCanvas(transform, p.x, p.z));
+
+    context.beginPath();
+    polygon.forEach((p, i) => (i === 0 ? context.moveTo(p.x, p.y) : context.lineTo(p.x, p.y)));
+    context.closePath();
+    context.fillStyle = 'rgba(255,255,255,.10)';
+    context.fill();
+    context.strokeStyle = 'rgba(255,255,255,.85)';
+    context.lineWidth = 1.2;
+    context.stroke();
+
+    const focus = minimapWorldToCanvas(transform, camera.state.focusX, camera.state.focusZ);
+    const tick = 4.5;
+    context.save();
+    context.translate(focus.x, focus.y);
+    context.rotate(minimapHeadingRotation(camera.state.yaw));
+    context.beginPath();
+    context.moveTo(0, -tick);
+    context.lineTo(tick * 0.62, tick * 0.55);
+    context.lineTo(-tick * 0.62, tick * 0.55);
+    context.closePath();
+    context.fillStyle = 'rgba(255,255,255,.95)';
+    context.fill();
+    context.restore();
+  }
+
   function update(): void {
     resize();
     context.clearRect(0, 0, cssWidth, cssHeight);
 
     traceBoundary();
-    context.fillStyle = 'rgba(26, 34, 27, .92)';
+    // Warm dark ground under a gold rim, so the map reads as the same material
+    // as the vellum frame around it rather than as a separate terminal.
+    context.fillStyle = 'rgba(38, 32, 23, .90)';
     context.fill();
-    context.strokeStyle = 'rgba(227, 216, 178, .7)';
+    context.strokeStyle = 'rgba(176, 125, 42, .85)';
     context.lineWidth = 1.25;
     context.stroke();
 
@@ -110,7 +172,9 @@ export function createMinimap(
 
 
     for (const node of world.nodes) {
-      if (visibility.resourceVisible(node.x, node.z)) dot(node.x, node.z, 2.2, 'rgba(91, 222, 210, .9)');
+      // Violet, matching PALETTE.legacy. Teal here contradicted D-025 on the
+      // one surface a player scans constantly.
+      if (visibility.resourceVisible(node.x, node.z)) dot(node.x, node.z, 2.2, 'rgba(185, 138, 217, .95)');
     }
     for (const site of world.sites) {
       if (visibility.entityVisible(site.team, site.x, site.z)) {
@@ -140,22 +204,7 @@ export function createMinimap(
       context.fillRect(a.x, a.y, Math.max(1, b.x - a.x + 0.5), Math.max(1, b.y - a.y + 0.5));
     }
 
-    const focus = minimapWorldToCanvas(transform, camera.state.focusX, camera.state.focusZ);
-    const heading = camera.state.yaw;
-    const marker = Math.max(5, Math.min(12, camera.state.distance * 0.025));
-    context.save();
-    context.translate(focus.x, focus.y);
-    context.rotate(-heading);
-    context.strokeStyle = 'rgba(255,255,255,.92)';
-    context.lineWidth = 1.2;
-    context.beginPath();
-    context.moveTo(0, -marker);
-    context.lineTo(marker * .65, marker * .65);
-    context.lineTo(-marker * .65, marker * .65);
-    context.closePath();
-    context.stroke();
-    context.restore();
-
+    drawViewport();
     context.restore();
   }
 

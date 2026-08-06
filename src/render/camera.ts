@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
-  cameraOffset, clampCameraState, distanceToFrameBoard, panDelta, type CameraState,
+  cameraOffset, clampCameraState, distanceToFrameBoard, panDelta, smoothedFocusHeight,
+  type CameraState,
 } from './cameraMath';
 import { terrainHeightAt } from '../sim/terrain';
 import type { MapBoundary } from '../sim/mapBoundary';
@@ -9,6 +10,10 @@ export interface RtsCamera {
   camera: THREE.PerspectiveCamera;
   target: THREE.Vector3;
   state: Readonly<CameraState>;
+  /** Vertical FOV in radians plus viewport aspect. Exposed so views that need
+   *  the camera's ground coverage — the minimap viewport rectangle — can compute
+   *  it from plain numbers rather than reaching into the Three camera. */
+  lens: Readonly<{ fov: number; aspect: number }>;
   pan: (realDt: number, keys: Record<string, boolean>, mouseX: number, mouseY: number) => void;
   zoom: (deltaY: number, clientX?: number, clientY?: number) => void;
   orbit: (deltaX: number, deltaY: number) => void;
@@ -47,9 +52,19 @@ export function createCamera(terrain?: THREE.Object3D, boundary?: MapBoundary): 
       camera.near = desiredNear;
       camera.updateProjectionMatrix();
     }
-    target.set(state.focusX, terrainHeightAt(state.focusX, state.focusZ), state.focusZ);
+    // Smoothed, not raw: the raw ground height under the focus makes the camera
+    // bob over terrain ripple. See `smoothedFocusHeight`.
+    target.set(
+      state.focusX,
+      smoothedFocusHeight(terrainHeightAt, state.focusX, state.focusZ, state.distance),
+      state.focusZ,
+    );
     const offset = cameraOffset(state);
-    camera.position.set(target.x + offset.x, offset.y, target.z + offset.z);
+    // All three axes relative to the target. `offset.y` was previously used as
+    // an absolute world height while x and z were relative, so any change in the
+    // target's height re-aimed the camera instead of moving it — the horizon
+    // rocked rather than the view rising.
+    camera.position.set(target.x + offset.x, target.y + offset.y, target.z + offset.z);
     camera.lookAt(target);
     camera.updateMatrixWorld();
   }
@@ -139,6 +154,9 @@ export function createCamera(terrain?: THREE.Object3D, boundary?: MapBoundary): 
     camera,
     target,
     get state() { return state; },
+    get lens() {
+      return { fov: THREE.MathUtils.degToRad(camera.fov), aspect: camera.aspect };
+    },
     pan,
     zoom: (deltaY: number, clientX?: number, clientY?: number) => {
       if (clientX !== undefined && clientY !== undefined) {

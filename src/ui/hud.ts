@@ -11,12 +11,16 @@ import { automationSlots, runningSquads } from '../sim/squads';
 import type { UiState } from '../input/selection';
 import { dayNumber, dayPeriod, daylight, formatClock } from '../sim/daynight';
 import { issueCommand } from '../replay/live';
+import { createDebugReadout } from './debugReadout';
 
 const el = (id: string): HTMLElement => {
   const found = document.getElementById(id);
   if (!found) throw new Error(`missing element #${id}`);
   return found;
 };
+
+/** Matches `--alert` in index.html. The only inline colour the HUD sets. */
+const ALERT = '#a33a2a';
 
 export interface Hud {
   flash: (msg: string) => void;
@@ -25,10 +29,9 @@ export interface Hud {
 }
 
 export function createHud(world: World, ui: UiState): Hud {
-  const dbg = {
-    fps: el('d-fps'), tps: el('d-tps'), tick: el('d-tick'), rate: el('d-rate'),
-    units: el('d-units'), sel: el('d-sel'), throttle: el('d-throttle'),
-  };
+  // Developer scaffolding, and only present behind `?dev=`. In a player build
+  // this is inert and there is no panel in the DOM at all.
+  const debug = createDebugReadout();
   const resUi = {
     essence: el('r-essence'), gathering: el('r-gathering'),
     workers: el('r-workers'), remaining: el('r-remaining'), supply: el('r-supply'),
@@ -77,10 +80,18 @@ export function createHud(world: World, ui: UiState): Hud {
     if (key !== cardKey) {
       cardKey = key;
       cardBtns.innerHTML = '';
+      // The band is a fixed grid of command columns; with nothing to command it
+      // carries one sentence instead, which needs the full width.
+      cardBtns.classList.toggle('is-empty', key === 'none');
       if (site) {
         cardTitle.textContent = `${BUILDING_TYPES[site.type].label} — under construction`;
         const btn = document.createElement('button');
-        btn.innerHTML = '<b>Cancel (Esc)</b><span class="c">full refund</span>';
+        // Two short lines per button: name, then hotkey and cost. The prose that
+        // used to be the second line ("full refund", "engage along route") is a
+        // tooltip and lives in full in the controls sheet — at five buttons the
+        // card's columns are ~100px and prose clipped inside them (D-032).
+        btn.title = 'Cancel this build site and refund the essence in full';
+        btn.innerHTML = '<b>Cancel</b><span class="c">Esc · refund</span>';
         btn.onclick = () => {
           issueCommand(
             { t: 'cancelSite', site: site.id },
@@ -98,7 +109,9 @@ export function createHud(world: World, ui: UiState): Hud {
         for (const ut of t.produces) {
           const u = UNIT_TYPES[ut];
           const btn = document.createElement('button');
-          btn.innerHTML = `<b>${u.label} (${hotkeys[ut] ?? ''})</b><span class="c">${u.cost} essence · ${u.supply} cmd</span>`;
+          const key = hotkeys[ut];
+          btn.title = `Train a ${u.label} — ${u.cost} essence, ${u.supply} command`;
+          btn.innerHTML = `<b>${u.label}</b><span class="c">${key ? `${key} · ` : ''}${u.cost}</span>`;
           btn.dataset['unit'] = ut;
           btn.onclick = () => tryTrain(ut);
           cardBtns.appendChild(btn);
@@ -110,7 +123,8 @@ export function createHud(world: World, ui: UiState): Hud {
         if (workers) {
           const t = BUILDING_TYPES.outpost;
           const btn = document.createElement('button');
-          btn.innerHTML = `<b>Build Outpost (B)</b><span class="c">${t.cost} essence · +${t.command} cmd</span>`;
+          btn.title = `Site an outpost — ${t.cost} essence, +${t.command} command, holds territory`;
+          btn.innerHTML = `<b>Outpost</b><span class="c">B · ${t.cost}</span>`;
           btn.dataset['build'] = 'outpost';
           btn.onclick = () => { ui.placingType = 'outpost'; };
           cardBtns.appendChild(btn);
@@ -118,15 +132,16 @@ export function createHud(world: World, ui: UiState): Hud {
         }
         const combat = sel.some(u => !u.gather);
         if (combat) {
-          const orders: Array<[string, string, () => void]> = [
-            ['Attack Move (A)', 'engage along route', () => { ui.armedOrder = 'attackMove'; ui.armedBehaviour = null; flash('attack-move armed — click the battlefield'); }],
-            ['Patrol (P)', 'repeat between two points', () => { ui.armedOrder = 'patrol'; ui.armedBehaviour = null; flash('patrol armed — click the battlefield'); }],
-            ['Stop (S)', 'cancel current orders', () => { const ids = sel.map(u => u.id); issueCommand({ t: 'stop', units: ids }, () => cmdStop(world, ids)); flash('orders stopped'); }],
-            ['Hold (H)', 'defend this ground', () => { const ids = sel.map(u => u.id); issueCommand({ t: 'hold', units: ids }, () => cmdHoldPosition(world, ids)); flash('holding position'); }],
+          const orders: Array<[string, string, string, () => void]> = [
+            ['Attack', 'A', 'Attack-move: engage anything met along the route', () => { ui.armedOrder = 'attackMove'; ui.armedBehaviour = null; flash('attack-move armed — click the battlefield'); }],
+            ['Patrol', 'P', 'Patrol between here and the next click', () => { ui.armedOrder = 'patrol'; ui.armedBehaviour = null; flash('patrol armed — click the battlefield'); }],
+            ['Stop', 'S', 'Cancel the current orders', () => { const ids = sel.map(u => u.id); issueCommand({ t: 'stop', units: ids }, () => cmdStop(world, ids)); flash('orders stopped'); }],
+            ['Hold', 'H', 'Hold this ground', () => { const ids = sel.map(u => u.id); issueCommand({ t: 'hold', units: ids }, () => cmdHoldPosition(world, ids)); flash('holding position'); }],
           ];
-          for (const [label, note, action] of orders) {
+          for (const [label, key, note, action] of orders) {
             const btn = document.createElement('button');
-            btn.innerHTML = `<b>${label}</b><span class="c">${note}</span>`;
+            btn.title = note;
+            btn.innerHTML = `<b>${label}</b><span class="c">${key}</span>`;
             btn.onclick = action;
             cardBtns.appendChild(btn);
           }
@@ -134,7 +149,13 @@ export function createHud(world: World, ui: UiState): Hud {
         cardHint.textContent = workers ? 'workers can build; combat hotkeys remain available for mixed selections' : 'A attack-move · P patrol · S stop · H hold';
       } else {
         cardTitle.textContent = 'Nothing selected';
-        cardHint.textContent = 'click the Standard to train units';
+        // The card is a fixed slab so the flash line above it cannot be walked
+        // into; say something in the button band rather than leaving it blank.
+        const idle = document.createElement('span');
+        idle.className = 'empty';
+        idle.textContent = 'Click a unit or the Standard. Drag to select a group.';
+        cardBtns.appendChild(idle);
+        cardHint.textContent = 'Right-click the ground to move · A attack-move · P patrol';
       }
     }
 
@@ -154,10 +175,10 @@ export function createHud(world: World, ui: UiState): Hud {
       const pct = Math.round((site.progress / site.required) * 100);
       const working = buildersOn(world, site.id).some(u => builderIsWorking(world, u));
       cardQueue.textContent = `${pct}% — ${working ? 'building' : 'PAUSED (no worker)'}`;
-      cardQueue.style.color = working ? '#555' : '#b02e2e';
+      cardQueue.style.color = working ? '' : ALERT;
     } else if (b?.queue.length) {
       const head = b.queue[0];
-      cardQueue.style.color = '#555';
+      cardQueue.style.color = '';
       if (head) {
         const pct = Math.round((1 - head.ticksLeft / UNIT_TYPES[head.type].buildTicks) * 100);
         const rest = b.queue.length > 1 ? ` (+${b.queue.length - 1} queued)` : '';
@@ -186,16 +207,21 @@ export function createHud(world: World, ui: UiState): Hud {
       essenceAtLastSample = world.resources.player;
       lastSample = now;
 
-      dbg.fps.textContent = fps.toFixed(0);
-      dbg.tps.textContent = tps.toFixed(1);
-      dbg.tps.className = Math.abs(tps - TICK_HZ) > 1.5 ? 'warn' : '';
-      dbg.rate.textContent = measuredRate.toFixed(0);
+      debug.sampled({
+        fps,
+        ticksPerSecond: tps,
+        tickRateOk: Math.abs(tps - TICK_HZ) <= 1.5,
+        essencePerMinute: measuredRate,
+      });
     }
-    dbg.tick.textContent = String(world.tick);
-    dbg.units.textContent = String(world.units.length);
-    dbg.sel.textContent = String(world.units.filter(u => u.selected).length);
-    dbg.throttle.textContent = throttled ? 'ON (~12fps)' : 'off';
-    dbg.throttle.className = throttled ? 'warn' : '';
+    if (debug.active) {
+      debug.live({
+        tick: world.tick,
+        units: world.units.length,
+        selected: world.units.filter(u => u.selected).length,
+        throttled,
+      });
+    }
 
     // Always visible, never hidden behind a toggle — the designer's ask is that
     // the player can tell the time of day at any moment.
@@ -223,13 +249,13 @@ export function createHud(world: World, ui: UiState): Hud {
     const used = supplyUsed(world, 'player');
     const cap = supplyCap(world, 'player');
     resUi.supply.textContent = `${used}/${cap}`;
-    resUi.supply.style.color = used >= cap ? '#b02e2e' : '';
+    resUi.supply.style.color = used >= cap ? ALERT : '';
 
     // Command buys automation slots as well as population (A4, §8.3).
     const slots = automationSlots(world, 'player');
     const chains = runningSquads(world, 'player');
     resUi.chains.textContent = `${chains}/${slots}`;
-    resUi.chains.style.color = chains >= slots ? '#b02e2e' : '';
+    resUi.chains.style.color = chains >= slots ? ALERT : '';
 
     renderCard();
   }

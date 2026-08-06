@@ -118,9 +118,12 @@ lerp using the loop's `alpha`. That is why a 30 Hz sim looks smooth at 144 fps.
 
 | File | Purpose |
 |---|---|
-| `hud.ts` | Resources, supply, clock, selection card, victory announcement. |
+| `hud.ts` | Resources, supply, clock, selection card, victory announcement. Feeds `debugReadout.ts` rather than owning debug DOM. |
+| `controlsSheet.ts` | The control reference and settings host — `?` or the Keys button. `CONTROL_GROUPS` is plain data so `tests/controlsSheet.test.ts` can assert coverage without a DOM (D-032). |
+| `debugReadout.ts` | Frame/tick/economy readout, built **only** when `?dev=` is present. In a player build it is an inert object and no panel exists (D-032). |
 | `chainEditor.ts` | Behaviour-chain editor. |
 | `minimap.ts` | Tactical map with visibility state. |
+| `researchPanel.ts` | Research interface over the tech engine (D-028) — available upgrades, prerequisites, cost gating. |
 | `fogOfWar.ts` | Presentation-side visibility field (unexplored/explored/visible). |
 | `visibility.ts` | Single controller governing what the player may see, click and target. |
 | `tutorial.ts` | Optional seven-step guided tutorial; observes state, never injects sim changes. |
@@ -149,7 +152,52 @@ lerp using the loop's `alpha`. That is why a 30 Hz sim looks smooth at 144 fps.
 | File | Purpose |
 |---|---|
 | `site.ts` / `site.css` | The public development page (`development.html`). Badges all art as concept art automatically. |
+| `gauntlet.ts` / `gauntlet.css` | The live build-loop record (`gauntlet.html`) — each piece, the bar it is judged against, critic verdicts, and what is held back. Reads the same `progress.json` as `site.ts`, so the two pages cannot disagree. |
 | `main.ts` | Game entry point: wires world, renderer, input, UI, recorder, loop. |
+
+## `scripts/` — build and verification tooling
+
+| File | Purpose |
+|---|---|
+| `sync-site-progress.mjs` | The **only** publication path. Turns `PROGRESS.md`, `ROADMAP.md` and `WORKLOG.md` into `public/data/progress.json`, and folds in the real test count from `.verify/tests.json`. |
+| `check-site-sync.mjs` | Fails the build when published data goes stale or a work-log section stops arriving. Parsers that match by heading name fail silently otherwise. |
+| `check-docs.mjs` | Fails the build when a `src/` module is missing from this file. |
+| `generate-build-info.mjs` | Stamps the visible build identifier. |
+| `tag-release.mjs` | Release tagging. |
+| `capture.mjs` | **Deterministic screenshot harness** (`npm run capture`). See below. |
+| `measure-hud.mjs` | Machine measurement of the in-game HUD at four viewports: screen share, overlapping panel pairs, declared z-indexes, distinct backgrounds, and a `document.elementFromPoint` reachability check on every button. No judgement in the output — it is how a claim about the HUD gets checked rather than asserted (D-032). Needs a dev server; `--dismiss` measures the steady state with the first-run guide closed. |
+
+### The screenshot harness
+
+`npm run capture` drives a real headless Chromium over the running dev server and
+writes PNGs plus an `index.json` manifest to `.capture/` (gitignored).
+
+It exists because the gauntlet requires critics to inspect the *real* build, and
+an agent cannot inspect what it cannot photograph. Editor-embedded browser
+surfaces routinely report `document.hidden`, which stops `requestAnimationFrame`
+entirely — the render loop never runs, every screenshot is black, and that is
+indistinguishable from a genuinely broken game.
+
+Two properties are load-bearing:
+
+- **Reproducible.** Every shot names an exact camera state and an exact tick, so
+  two runs are comparable. `PERFORMANCE_TESTING.md` forbids free-flown camera
+  paths for the same reason.
+- **The real game.** Shots are driven through `loop.stepOnce()` and the camera's
+  own public methods — the same paths the sandbox and the mouse use. There is no
+  capture-only render path that could flatter the build.
+
+`src/main.ts` exposes a `window.__greenmantle` handle **only** under
+`?capture=1`. It is deliberately not `?dev=`: the sandbox is a human tool with
+its own panel, and conflating the two means changing one silently alters the
+other. A global handing out the mutable `World` must never exist in a build a
+player loads.
+
+The camera is flown to each target by a converging control loop, not a single
+delta — `zoom()` feeds a damped velocity clamped to ±18 per frame, so one large
+nudge under-travels. That produced a "war table" shot at distance 104 instead of
+430, which looked like a perfectly plausible screenshot. Silent under-travel in a
+verification tool is worse than a crash.
 
 ---
 

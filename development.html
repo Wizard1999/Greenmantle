@@ -16,11 +16,12 @@
 
     <header class="site-header" data-header>
       <div class="shell">
-        <a class="wordmark" href="#top">Long<span>barrow</span></a>
+        <a class="wordmark" href="#top">Green<span>mantle</span></a>
         <nav class="nav" aria-label="Sections">
           <a href="#doctrine">Doctrine</a>
           <a href="#factions">Factions</a>
           <a href="#progress">Progress</a>
+          <a href="./gauntlet.html">Gauntlet</a>
           <a href="#roadmap">Roadmap</a>
           <a href="#gallery">Art</a>
         </nav>
@@ -48,7 +49,7 @@
             </div>
             <dl class="hero-stats">
               <div><dt>Overall progress</dt><dd><span data-progress-number>0</span><small>%</small></dd></div>
-              <div><dt>Automated tests</dt><dd>269<small> passing</small></dd></div>
+              <div><dt>Automated tests</dt><dd><span data-test-count>—</span><small> passing</small></dd></div>
               <div><dt>Simulation</dt><dd>30<small> Hz deterministic</small></dd></div>
               <div><dt>Races planned</dt><dd>4<small> forces of nature</small></dd></div>
             </dl>
@@ -176,11 +177,49 @@
         </div>
       </section>
 
-      <!-- 5. Full roadmap ------------------------------------------------- -->
+      <!-- 5. Work log ----------------------------------------------------- -->
+      <section class="section" id="worklog">
+        <div class="shell">
+          <div class="section-heading reveal">
+            <p class="section-kicker">04 — Work in flight</p>
+            <h2>What is being built<br />right now.</h2>
+            <p class="lede">
+              The roadmap below says where the project is going. This says what is on the
+              bench today, what it has to prove before it counts as finished, and the
+              strongest objection still standing against it. Generated from
+              <code>docs/WORKLOG.md</code>.
+            </p>
+          </div>
+
+          <div class="worklog reveal">
+            <article class="glass worklog-now">
+              <div class="worklog-now-head">
+                <p class="eyebrow">Current round</p>
+                <span class="worklog-status" data-worklog-status>—</span>
+              </div>
+              <h3 data-worklog-piece>Loading the work log from the repository…</h3>
+              <p class="worklog-bar" data-worklog-bar></p>
+              <p class="worklog-session" data-worklog-state></p>
+            </article>
+
+            <article class="glass worklog-gap">
+              <p class="eyebrow">What finishing means</p>
+              <p data-worklog-scope></p>
+            </article>
+          </div>
+
+          <p class="worklog-more">
+            <a href="./gauntlet.html">Read the full gauntlet log →</a>
+            <span>Every piece, the bar it is judged against, what each critic found, and what is held back.</span>
+          </p>
+        </div>
+      </section>
+
+      <!-- 6. Full roadmap ------------------------------------------------- -->
       <section class="section" id="roadmap">
         <div class="shell">
           <div class="section-heading reveal">
-            <p class="section-kicker">04 — Complete production plan</p>
+            <p class="section-kicker">05 — Complete production plan</p>
             <h2>The whole roadmap,<br />not a marketing summary.</h2>
             <p class="lede">
               Every phase, extension, dependency, completed foundation, and long-term
@@ -198,7 +237,7 @@
       <section class="section" id="gallery">
         <div class="shell">
           <div class="section-heading reveal">
-            <p class="section-kicker">04 — Design language</p>
+            <p class="section-kicker">06 — Design language</p>
             <h2>The target is not realism.<br />It is believable myth.</h2>
             <p class="lede">
               Warm painterly light, natural asymmetry, and weathering treated as a real

@@ -221,16 +221,45 @@ export function setOpacity(mat: THREE.ShaderMaterial, value: number): void {
   if (u) u.value = value;
 }
 
+const CLOUD_DRIFT_X = 0.0065;
+const CLOUD_DRIFT_Z = 0.0032;
+
+/**
+ * Where the cloud-shadow field has drifted to after `elapsedSeconds`.
+ *
+ * Bounded on purpose. `hash21` opens with `fract(p * vec2(123.34, 456.21))`,
+ * and a float32 carries roughly seven significant digits — so once the offset
+ * reaches the thousands, that multiply lands near 1e6 and `fract()` has almost
+ * no fractional bits left to return. The hash then yields quantised noise that
+ * reshuffles every frame, and the whole ground flickers.
+ *
+ * That is not hypothetical: this was called with `performance.now()` in
+ * *milliseconds* while the drift constants assume *seconds*, so the offset
+ * passed 1e2 within seconds of page load and the ground pulsed continuously.
+ * Seconds keep an hour-long match under 25; the wrap keeps a tab left open
+ * overnight from ever reaching the precision cliff.
+ */
+export function cloudOffset(elapsedSeconds: number): { x: number; z: number } {
+  const wrap = 4096;
+  return {
+    x: (elapsedSeconds * CLOUD_DRIFT_X) % wrap,
+    z: (elapsedSeconds * CLOUD_DRIFT_Z) % wrap,
+  };
+}
+
 /** Cloud shadows drifting across the ground: one of the strongest Ghibli
- *  signals available, and it costs two noise lookups. */
+ *  signals available, and it costs two noise lookups.
+ *
+ *  `elapsedSeconds` is **seconds**, not milliseconds — see `cloudOffset`. */
 export function updatePainterlyGlobals(
-  elapsed: number, cloudAmount: number, sky?: SkyGlobals,
+  elapsedSeconds: number, cloudAmount: number, sky?: SkyGlobals,
 ): void {
+  const drift = cloudOffset(elapsedSeconds);
   for (const mat of registry) {
     const amt = mat.uniforms['uCloudAmount'];
     const off = mat.uniforms['uCloudOffset'];
     if (amt) amt.value = cloudAmount;
-    if (off) (off.value as THREE.Vector2).set(elapsed * 0.0065, elapsed * 0.0032);
+    if (off) (off.value as THREE.Vector2).set(drift.x, drift.z);
     if (!sky) continue;
     // Every painterly surface reads the same sun, so the whole world turns
     // over together rather than each material drifting on its own schedule.

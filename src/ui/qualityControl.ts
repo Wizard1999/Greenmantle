@@ -28,6 +28,9 @@ export function mountQualityControl(activeTier: QualityTier): QualityControl {
     window.location.reload();
   });
   root.appendChild(select);
-  document.body.appendChild(root);
+  // Mounted inside the controls sheet (D-032). It was a floating dark chip over
+  // the battlefield, in a different visual language from everything near it, for
+  // a choice a player makes once a session.
+  (document.getElementById('controls-settings') ?? document.body).appendChild(root);
   return { element: root };
 }

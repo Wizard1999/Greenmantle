@@ -8,6 +8,73 @@ Format: severity · area · description · repro · status
 
 ## Open
 
+### B-005 · **blocking** · sim · A mirrored fight is decided entirely by array insertion order
+Two identical 10-unit forces, mirrored, inside weapon reach, resolve **10–0 for
+whichever team was pushed into `world.units` first** — in exactly 384 ticks
+either way. Reversing only the insertion order reverses the entire result.
+
+This is not randomness; combat consumes no RNG by design (D-019). It is a
+systematic first-mover advantage: `stepCombat` iterates `world.units` in order
+and applies damage immediately, so a unit earlier in the array strikes, kills,
+and its victim is removed before it ever swings back. The advantage compounds
+down the line.
+
+It invalidates the design's most load-bearing balance claim — §2's "maps are
+symmetric from spawns, no spawn point has an inherent advantage" — and it
+silently invalidates *every* combat measurement taken on top of it, including
+any future flanking or high-ground scenario.
+
+**Fix direction:** resolve damage in two phases — read every attacker's intent
+against the state at tick start, then apply. Removing the dead must happen after
+both sides have struck. Do not fix by shuffling the array; that trades a
+systematic bias for a seed-dependent one and breaks D-019's "no hidden
+randomness".
+**Repro:** spawn 10 legionnaires per team at ±0.36 on x, mirrored on z, run
+5400 ticks; swap the two `spawnUnit` calls and run again.
+**Status:** open, confirmed by direct measurement 2026-08-06.
+
+### B-006 · **blocking** · sim · Units acquire targets they can never reach
+`COMBAT.acquireRange` is 9.0; a Legionnaire's weapon range is **0.9**. A unit
+therefore sees an enemy from ten times further away than it can hit one — and
+nothing closes the gap. `stepCombat` writes `u.targetId`, but `stepMovement`
+moves a unit only toward `u.target`, a *position*, and no system ever converts
+one into the other.
+
+Measured: two 10-unit lines 30 apart, 3600 ticks (120 simulated seconds).
+Total HP unchanged at 2400. Distance unchanged at 30.00. No unit ever held a
+move target or a target id. They stood and looked at each other.
+
+Every fight in the game today happens only where the player has personally
+parked units within 0.9 of each other. The selection card advertises
+"Attack Move (A) — engage along route", which is not true: attack-move walks to
+a point and engages nothing on the way.
+
+**Fix direction:** a pursuit step that gives a unit with a `targetId` and no
+order a move target toward it, bounded by a leash so units do not chase across
+the map — and gated by `orderMode`, since a unit told to hold position must not
+wander. This is squad-level intent under D-003, so it belongs above the unit.
+**Repro:** the probe above; or in-game, attack-move past an idle enemy.
+**Status:** open, confirmed by direct measurement 2026-08-06.
+
+### B-007 · high · sim · Terrain is not rotationally symmetric, so spawns are not equal
+§2 requires symmetric spawns. Sampling `terrainHeightAt` at 800 pairs of points
+related by 180° rotation about the map centre, across 200 seeds: **mean height
+delta 0.69, worst 1.36, and 600 of 800 pairs differ by more than 0.01.**
+
+`COMBAT.highGroundBonus` is 1.25 and `lowGroundPenalty` is 0.85, so elevation
+multiplies damage directly. A mirrored engagement is therefore not a mirror.
+
+Note the terrain is still "a fixed formula" (D-017), so this is a property of
+the formula rather than of any seed — every map has it, and no map browser or
+generator work will fix it by itself.
+
+`tests/world.test.ts` and `tests/mapBoundary.test.ts` assert *position* symmetry
+only, which is why this survived.
+**Fix direction:** make `terrainHeightAt` symmetric under the same rotation the
+boundary already uses, and assert it — height symmetry, not just layout
+symmetry.
+**Status:** open, confirmed by direct measurement 2026-08-06.
+
 ### B-004 · medium · render · Fog of war renders as hard tiles
 The fog overlay is a coarse grid of instanced quads, so its edges are visibly
 square against painterly terrain — it reads as a checkerboard rather than
@@ -44,8 +111,11 @@ first thing that will break the 100-unit target, and the tick-rate increase to
 
 Not bugs yet, but the places where bugs are most likely to appear first.
 
-- **Determinism.** No test currently proves the sim is deterministic. Until the
-  replay determinism test exists, a desync bug could sit undetected for months.
+- **Determinism is not fairness.** `tests/determinism.test.ts` proves the sim
+  produces the same result twice. B-005 is the reminder that this says nothing
+  about whether that result is *correct*: a fight decided by array order is
+  perfectly deterministic and perfectly unfair, and the determinism suite was
+  green throughout. Symmetry needs its own assertions.
 - **Tick-rate migration.** The 20 → 30 Hz change rescaled every tick constant by
   1.5. Any constant that was missed will produce subtly wrong timing rather than
   an obvious failure. Suspect this first if pacing feels off.
