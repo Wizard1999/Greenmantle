@@ -12,8 +12,12 @@ import { mapBoundaryForSeed, mapLayoutForBoundary } from './mapBoundary';
  * every existing seed produce a different map, and old replays would play out
  * on terrain that no longer matches what was recorded. Versioning turns that
  * from a silent wrong answer into an explicit rejection.
+ *
+ * 4 — `terrainHeightAt` rebuilt from terms that are even under 180° rotation,
+ * so height is symmetric between spawns (B-007). Every existing seed produces
+ * different ground, which is exactly what this version guards.
  */
-export const MAP_VERSION = 3;
+export const MAP_VERSION = 4;
 
 /**
  * Phase 1 seeded map (assumption A5). Boundary-derived and rotationally symmetric: rotate 180° about

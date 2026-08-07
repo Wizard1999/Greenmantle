@@ -113,18 +113,21 @@ describe('[1.10] positioning decides fights', () => {
   });
 
   it('elevation multipliers match the tuning at a real height gap', () => {
-    // The attacker must be searched too, not pinned at the origin: terrain is
-    // floored at TERRAIN_FLOOR, so a unit standing at a low point can never
-    // gain the full threshold over anything.
+    // The two positions must be searched independently. This previously placed
+    // the defender at the attacker's 180° mirror, which found a height gap only
+    // because the terrain was asymmetric — the defect B-007 fixed. Mirrored
+    // points are now guaranteed equal in height, so that search can never
+    // succeed, and it would have quietly re-encoded the bug as a requirement.
     const w = empty();
     const a = put(w, 'legionnaire', 'player', 0, 0);
     const d = put(w, 'legionnaire', 'rival', 0, 0);
     let high = false;
     let low = false;
-    for (let x = -30; x <= 30 && !(high && low); x += 1) {
-      for (let z = -30; z <= 30 && !(high && low); z += 1) {
+    for (let x = -30; x <= 30 && !(high && low); x += 2) {
+      for (let z = -30; z <= 30 && !(high && low); z += 2) {
         a.x = x; a.z = z;
-        d.x = -x; d.z = -z;
+        // Offset within a plausible engagement, not across the whole board.
+        d.x = x + COMBAT.acquireRange; d.z = z;
         const m = elevationMultiplier(a, d);
         if (m === COMBAT.highGroundBonus) high = true;
         if (m === COMBAT.lowGroundPenalty) low = true;

@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 2
-**State:** combat repaired · slice 0 awaiting critique · committed locally, unpushed
+**Round:** 3
+**State:** combat and spawn fairness repaired · fog is next · committed locally, unpushed
 
 ## What finishing means
 
@@ -79,7 +79,7 @@ is wrong rather than the numbers.
 
 ### Fog and the war table read as authored
 - **Bar:** our own first-party concept art in `docs/assets/concept-art/`, blind A/B
-- **Status:** Queued
+- **Status:** Building
 
 At overview distance the board is dominated by hard-edged violet-blue
 checkerboard tiles with stippled edges. `BUGS.md` logs this as B-004, "colour
@@ -128,6 +128,39 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 3
+
+Spawns are finally equal. `terrainHeightAt` was
+`sin(0.15x)·cos(0.15z)·1.6 + sin(0.35x + 3.0)·0.5` — the first term *negates*
+under 180° rotation and the second has no symmetry at all, so 600 of 800
+mirrored pairs sat at different heights and one side got free damage from
+`highGroundBonus` in a nominally even fight.
+
+Rebuilt from terms that are each even under `(x, z) → (-x, -z)`: `cos·cos`,
+`sin·sin`, `cos(x ± z)`. That makes symmetry a property of the *shape* of the
+formula rather than of coefficients somebody tuned correctly once, so a future
+art pass cannot reintroduce the defect by changing numbers. All 800 pairs now
+differ by zero and base anchors match across 200 seeds. `MAP_VERSION` → 4.
+
+The symmetry test deliberately also asserts the terrain is **not flat**, and
+that a gap crossing the high-ground threshold is reachable inside a single
+acquire range. A constant height would pass every symmetry check ever written
+and quietly delete §2's "terrain decides fights"; symmetric and boring is a
+worse failure than asymmetric, because nothing would flag it.
+
+**A second test turned out to be defending the bug.** `phase1.test.ts` looked
+for an elevation gap by putting the defender at the attacker's exact mirror —
+which found one *only because* the terrain was broken. Under the fix that search
+can never succeed. Together with round 2's eleven fixtures, that is three
+separate places where the suite had encoded a defect as a requirement, which is
+worth naming as a pattern: when a fix breaks tests, read the tests before
+softening the fix.
+
+Verified in the real build via `npm run capture`: the board reads as symmetric
+at overview distance, relief survives at miniature distance, and the armies now
+actually meet — 22 units alive at tick 2700 where the pre-combat build had 29,
+because fights now resolve.
 
 ### round 2
 

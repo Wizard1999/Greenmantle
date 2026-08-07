@@ -78,7 +78,7 @@ worker is hunted and killed on the way. Those fixtures now use
 plainly. A fixture that depends on a broken mechanic is a fixture that will
 defend the bug.
 
-### B-007 · high · sim · Terrain is not rotationally symmetric, so spawns are not equal
+### B-007 · FIXED 2026-08-06 · sim · Terrain is not rotationally symmetric, so spawns are not equal
 §2 requires symmetric spawns. Sampling `terrainHeightAt` at 800 pairs of points
 related by 180° rotation about the map centre, across 200 seeds: **mean height
 delta 0.69, worst 1.36, and 600 of 800 pairs differ by more than 0.01.**
@@ -92,10 +92,24 @@ generator work will fix it by itself.
 
 `tests/world.test.ts` and `tests/mapBoundary.test.ts` assert *position* symmetry
 only, which is why this survived.
-**Fix direction:** make `terrainHeightAt` symmetric under the same rotation the
-boundary already uses, and assert it — height symmetry, not just layout
-symmetry.
-**Status:** open, confirmed by direct measurement 2026-08-06.
+**Status:** **fixed structurally, not by tuning.** `terrainHeightAt` is now a
+sum of terms that are each *even* under `(x, z) → (-x, -z)` — `cos·cos`,
+`sin·sin`, and `cos(x ± z)` — so symmetry holds for any coefficients a later
+art pass picks, rather than depending on numbers someone got right once. All
+800 mirrored pairs now differ by 0, and base anchors match across 200 seeds.
+`MAP_VERSION` → 4, because every existing seed produces different ground.
+
+Guarded by `tests/terrainSymmetry.test.ts`, which also asserts the terrain is
+**not flat** — a constant height would satisfy every symmetry check and destroy
+§2's "terrain decides fights" — and that a height gap crossing
+`HIGH_GROUND_THRESHOLD` is reachable *within* one acquire range, so elevation
+can actually matter between two units fighting rather than only across the map.
+
+**One existing test was written against the bug.** `phase1.test.ts` searched for
+an elevation gap by placing the defender at the attacker's 180° mirror, which
+only ever found one *because* the terrain was asymmetric. Under the fix that
+search can never succeed. It now offsets the two positions independently. A test
+that passes only while a defect exists is a test defending the defect.
 
 ### B-004 · medium · render · Fog of war renders as hard tiles
 The fog overlay is a coarse grid of instanced quads, so its edges are visibly
