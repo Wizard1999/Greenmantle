@@ -5,6 +5,7 @@ import {
 } from './cameraMath';
 import { terrainHeightAt } from '../sim/terrain';
 import type { MapBoundary } from '../sim/mapBoundary';
+import { BATTLEFIELD } from '../data/tuning';
 
 export interface RtsCamera {
   camera: THREE.PerspectiveCamera;
@@ -103,8 +104,10 @@ export function createCamera(terrain?: THREE.Object3D, boundary?: MapBoundary): 
 
   function frameBoard(): void {
     const desired = distanceToFrameBoard(
-      boundary?.bounds.width ?? 80,
-      boundary?.bounds.depth ?? 80,
+      // No hardcoded fallback size: with no boundary there is no board, and a
+      // wrong guess frames empty space (D-038).
+      boundary?.bounds.width ?? BATTLEFIELD.radius * 2,
+      boundary?.bounds.depth ?? BATTLEFIELD.radius * 2,
       THREE.MathUtils.degToRad(camera.fov),
       camera.aspect,
     );

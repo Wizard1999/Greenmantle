@@ -63,13 +63,22 @@ export function createFogOverlay(
       uFog: { value: texture },
       uOrigin: { value: new THREE.Vector2(minX, minZ) },
       uSize: { value: new THREE.Vector2(width, depth) },
-      // Deep violet-blue, never black: D-005 is explicit that shadow shifts hue
-      // rather than going to zero, and pure black reads as a missing texture.
-      // Lifted from the previous values because the board now has to stay
-      // legible as an object against the void — at war-table zoom an unexplored
-      // map that matches the background simply disappears.
-      uUnexplored: { value: new THREE.Color(0x232a45) },
-      uExplored: { value: new THREE.Color(0x3d3f63) },
+      // Ground never seen reads as the void itself, so the map's *extent* is
+      // concealed along with its contents (D-039). An earlier pass lifted this
+      // deliberately, to keep the board legible as an object at war-table zoom;
+      // that was the wrong trade. The size and shape of the map is exactly the
+      // information scouting is meant to buy, and a silhouette visible from the
+      // first frame has already given it away.
+      //
+      // This does not contradict D-005. That rule governs *shading* — a surface
+      // in shadow is still a surface, and blacking it out discards form that is
+      // really there. Unexplored ground is not shaded, it is unknown: there is
+      // no form to preserve and drawing one is a claim the game cannot support.
+      // Shadow is dark; the unknown is empty.
+      uUnexplored: { value: new THREE.Color(0x05070c) },
+      // Remembered ground keeps a violet veil over real terrain — that *is*
+      // shading, and D-005 applies to it in full.
+      uExplored: { value: new THREE.Color(0x39385c) },
       uExploredAt: { value: EXPLORED_CONCEALMENT },
     },
     vertexShader: /* glsl */`
@@ -94,7 +103,9 @@ export function createFogOverlay(
         float concealment = texture2D(uFog, vFogUv).r;
         // Below the remembered level the veil lifts away completely, so ground
         // in sight is never tinted at all.
-        float alpha = smoothstep(0.04, 1.0, concealment) * 0.9;
+        // Reaches full opacity at the unexplored end, so never-seen ground is
+        // indistinguishable from the void rather than a dim board (D-039).
+        float alpha = smoothstep(0.04, 1.0, concealment);
         if (alpha < 0.004) discard;
         float deep = smoothstep(uExploredAt, 1.0, concealment);
         gl_FragColor = vec4(mix(uExplored, uUnexplored, deep), alpha);

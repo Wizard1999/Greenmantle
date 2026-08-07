@@ -33,6 +33,14 @@ export function terrainHeightAt(x: number, z: number): number {
           + Math.sin(x * 0.11) * Math.sin(z * 0.11) * 0.95
           + Math.cos((x + z) * 0.09) * 0.45
           + Math.cos((x - z) * 0.13) * 0.35;
+  // NOTE (B-009): at these amplitudes no melee unit can ever receive an
+  // elevation modifier. The largest height difference available anywhere on the
+  // board at a Legionnaire's contact reach of 1.74 is 0.4797, against
+  // HIGH_GROUND_THRESHOLD of 0.6 — so high ground is a Marksman-only mechanic
+  // while §8.7 builds Cohort's core melee unit around holding a line. Adding a
+  // short-wavelength term fixes it, and was tried; it is a balance lever with
+  // two equally valid alternatives (lower the threshold, or lengthen melee
+  // reach), so it is the designer's call rather than a defect to patch quietly.
   return Math.max(h, TERRAIN_FLOOR);
 }
 

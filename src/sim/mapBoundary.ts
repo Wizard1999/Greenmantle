@@ -1,5 +1,6 @@
 import type { Vec2 } from '../core/types';
 import { rngNext, rngSeed } from '../core/rng';
+import { BATTLEFIELD } from '../data/tuning';
 
 export interface MapBounds {
   minX: number;
@@ -19,7 +20,9 @@ export interface MapBoundary {
 }
 
 const VERTEX_COUNT = 12;
-const BASE_RADIUS = 39;
+/** The map's size is content, not an engine constant — see D-038 and the
+ *  `BATTLEFIELD` block. Nothing in `sim/` or `render/` may assume it. */
+const BASE_RADIUS = BATTLEFIELD.radius;
 
 /**
  * Generates a deterministic, rotationally symmetric irregular battlefield.
@@ -192,10 +195,44 @@ export function mapLayoutForBoundary(boundary: MapBoundary): MapLayout {
 
   const playerBasePoint = safe(-0.46, 0, 5.5);
   const rivalBasePoint = mirrored(playerBasePoint);
-  const playerResources = [safe(-0.62, 6.5, 2), safe(-0.35, -7.5, 2)];
+
+  /**
+   * A point at an absolute offset from the player's base — `inward` toward the
+   * centre of the map, `lateral` across it.
+   *
+   * Everything near a base must be placed in world units, not as a fraction of
+   * the map. `safe()` mixes a fraction of the edge with an absolute lateral
+   * offset, which was invisible while the board was 39 units across and became
+   * a defect the moment it grew (D-038): the starting resources moved from
+   * about four units off the base to seventeen, and the opening economy stopped
+   * working. How far a worker walks on its first trip is a property of the
+   * game, not of how big the map happens to be.
+   */
+  const fromBase = (inward: number, lateral: number): Vec2 => clampPointToMapBoundary(
+    boundary,
+    playerBasePoint.x + dx * inward + tx * lateral,
+    playerBasePoint.z + dz * inward + tz * lateral,
+    2,
+  );
+
+  /**
+   * Two clusters, and the split is the point (B-008).
+   *
+   * Previously every node on the map sat inside a starting control radius, so
+   * §8.1's whole expansion row had nothing to act on — there was nowhere to
+   * expand *to*. The home pair sustains the opening; the outer pair sits beyond
+   * any starting control radius and toward the middle of the board, so taking
+   * it is a decision with a defence problem attached.
+   */
+  const playerResources = [
+    fromBase(7.5, 5.5),
+    fromBase(6.0, -6.5),
+    safe(-0.20, 11, 2),
+    safe(-0.05, -13, 2),
+  ];
   const rivalResources = playerResources.map(mirrored);
-  const playerWorkers = safe(-0.38, 2.5, 2.5);
-  const playerArmy = safe(-0.28, -1.5, 2.5);
+  const playerWorkers = fromBase(4.5, 2.5);
+  const playerArmy = fromBase(8.0, -2.0);
 
   return {
     playerBase: { ...playerBasePoint, facingX: dx, facingZ: dz },

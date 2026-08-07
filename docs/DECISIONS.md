@@ -1030,6 +1030,103 @@ system that is already simulation state, already hashed, and already displayed.
 
 ---
 
+## D-038 — The map is far larger, and nothing may assume its size
+**Date:** 2026-08-06 · **Status:** locked, from the designer
+
+**Decision:** Two things, and the second matters more than the first.
+
+**1. The battlefield grows by roughly an order of magnitude in area.** The floor
+is 7× the current area; the target is 15–16×. `BASE_RADIUS` moves from 39 to
+**156** — 4× the linear scale, 16× the area — expressed as a single value in
+`src/data/`, so the whole range is one edit.
+
+**2. No code may know the map's size except the map definition.** Size is
+discovered from data, never assumed.
+
+**Reason.** The measurement that prompted this: a real match ships **4 resource
+nodes, every one inside a starting control radius**, peaks at **28 units across
+both teams**, and ends in **2.0 minutes** with 2,760 resource unspent. Three
+separate design promises fail at once on a board that small — §8.1's expansion
+philosophy is inert because there is nothing to expand *to*, D-006's 100-unit
+performance target is unreachable by a factor of seven in any actual match, and
+§3's 10–15 minute pacing target is off by an order of magnitude. None of those
+are balance problems. The board is too small to contain the game.
+
+The second half is the engine-first rule (D-029, D-033a) applied to geography.
+An audit found five places that each independently assumed the map's
+dimensions:
+
+| Location | Assumption |
+|---|---|
+| `sim/mapBoundary.ts` | `BASE_RADIUS = 39`, a content number living inside the engine |
+| `sim/terrain.ts` | `TERRAIN_SIZE = 80` |
+| `render/camera.ts` | `boundary?.bounds.width ?? 80` |
+| `render/cameraMath.ts` | camera limits fixed at ±180, `maxDistance` 520 |
+| `ui/fogOfWar.ts` | a 48×48 grid regardless of how much ground it covers |
+
+Every one is a place where changing the map silently breaks something else —
+the fog grid is the clearest: at 16× area its cells become 6.5 world units
+across instead of 1.6, so the fog would coarsen exactly as the map got big
+enough to need it fine. A creator swapping in their own map (`ENGINE_VISION.md`)
+would hit all five.
+
+**Consequence:**
+
+- Map dimensions move to `src/data/`, per CLAUDE.md's rule that no balance or
+  content number lives outside it.
+- **Camera limits derive from the boundary** rather than being constants. A
+  fixed ±180 pan limit on a 312-wide board would fence the player inside the
+  middle of their own map.
+- **Fog resolution derives from the boundary**, so cell size in world units is
+  what stays constant, not cell count.
+- `MAP_VERSION` bumps: every seed produces a different board.
+- Resource placement must put nodes **outside** starting control radii, or a
+  bigger map changes nothing about the economy. Expansion has to be the reason
+  the space exists.
+- Crossing time grows with the map. At 4× linear and a Legionnaire's speed of
+  4.2, a full traverse is roughly 74 seconds — that is a real strategic
+  distance, and it is what makes scouting, screening and fallback positions
+  mean anything.
+
+---
+
+## D-039 — Fog conceals the map's extent, not merely its contents
+**Date:** 2026-08-06 · **Status:** locked, from the designer · amends D-005 in one respect
+
+**Decision:** Unexplored ground is not a dim version of the board — it is
+**absence**. The player cannot see the shape, size or edge of the map until
+they have explored it. Explored-but-unwatched ground remains a legible dim
+veil; only *never seen* reads as nothing at all.
+
+**Reason.** The map's extent is information, and it is exactly the information
+scouting is supposed to buy. A board whose silhouette is visible from the first
+frame has already answered "how much space is there, and where does it end?"
+before anyone has walked anywhere — which makes the first minutes of §3's
+"full scouting should always be possible for a player willing to invest in it"
+a formality.
+
+**This reverses a change made earlier the same day.** When the fog was rebuilt
+(B-004), its unexplored tone was deliberately *lifted* so the board would stay
+"legible as an object against the void" at war-table zoom. That was a
+defensible reading of D-005 — shadows shift hue rather than going to black —
+and it was the wrong call, because it optimised for the board looking like a
+war table over the player not knowing what they had not seen.
+
+**The distinction that resolves it with D-005:** D-005 governs *shading*. A
+surface in shadow is still a surface, and rendering it black throws away form
+that is really there. Unexplored ground is not shaded — it is unknown. There is
+no form to preserve, and drawing one is a claim the game has no business
+making. Shadow is dark; the unknown is empty. They are not the same and should
+not look the same.
+
+**Consequence:** the three fog states now differ in kind, not only in degree —
+unknown reads as void, remembered as a violet veil over real ground, visible as
+clear. The board's silhouette against the void therefore *grows* as the match
+proceeds, which is a better expression of D-014's war table than a complete
+board revealed at the start.
+
+---
+
 ## D-032 — The HUD is one command surface; help is timed, not permanent
 **Date:** 2026-08-06
 

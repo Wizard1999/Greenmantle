@@ -1,19 +1,36 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cameraOffset, clampCameraState, distanceToFrameBoard, normalizeAngle, panDelta,
-  smoothedFocusHeight,
+  cameraLimitsFor, cameraOffset, clampCameraState, DEFAULT_CAMERA_LIMITS,
+  distanceToFrameBoard, normalizeAngle, panDelta, smoothedFocusHeight,
 } from '../src/render/cameraMath';
 import { terrainHeightAt } from '../src/sim/terrain';
 
 describe('war-table camera math', () => {
   it('clamps focus, pitch, and distance to safe limits', () => {
-    const state = clampCameraState({ focusX: 1000, focusZ: -1000, yaw: 20, pitch: -2, distance: 900 });
-    expect(state.focusX).toBe(180);
-    expect(state.focusZ).toBe(-180);
+    // Asserted against the derived limits, not the numbers they happen to
+    // produce. These were hardcoded 180/520, which silently encoded a 39-unit
+    // map and would have fenced the player inside the middle of the 156-unit
+    // board without any test noticing (D-038).
+    const limits = DEFAULT_CAMERA_LIMITS;
+    const state = clampCameraState({
+      focusX: limits.maxX * 10, focusZ: limits.minZ * 10,
+      yaw: 20, pitch: -2, distance: limits.maxDistance * 2,
+    });
+    expect(state.focusX).toBe(limits.maxX);
+    expect(state.focusZ).toBe(limits.minZ);
     expect(state.pitch).toBeGreaterThan(0);
-    expect(state.distance).toBe(520);
+    expect(state.distance).toBe(limits.maxDistance);
     expect(state.yaw).toBeGreaterThanOrEqual(-Math.PI);
     expect(state.yaw).toBeLessThan(Math.PI);
+  });
+
+  it('derives its reach from the board rather than from a constant', () => {
+    const small = cameraLimitsFor(39);
+    const large = cameraLimitsFor(156);
+    expect(large.maxX).toBeCloseTo(small.maxX * 4, 6);
+    expect(large.maxDistance).toBeGreaterThan(small.maxDistance);
+    // Pan must reach past the rim: the board is an object in a void (D-014).
+    expect(large.maxX).toBeGreaterThan(156);
   });
 
   it('keeps camera offset exactly at the requested distance', () => {

@@ -17,7 +17,7 @@ import { mapBoundaryForSeed, mapLayoutForBoundary } from './mapBoundary';
  * so height is symmetric between spawns (B-007). Every existing seed produces
  * different ground, which is exactly what this version guards.
  */
-export const MAP_VERSION = 4;
+export const MAP_VERSION = 5;
 
 /**
  * Phase 1 seeded map (assumption A5). Boundary-derived and rotationally symmetric: rotate 180° about

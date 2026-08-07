@@ -146,6 +146,71 @@ Draw calls at tactical distance fell from 150 to 106.
 mask takes many distinct values rather than the three a binary field can, which
 is the property that actually removes the cell edges.
 
+### B-009 · high · balance · Melee units can never reach high ground
+Measured by sweeping the whole board at 0.25 spacing across 64 directions: the
+largest height difference available at a Legionnaire's contact reach of **1.74**
+is **0.4797**, against `HIGH_GROUND_THRESHOLD` of **0.600**. A 0.6 gap first
+appears somewhere between 2.00 and 2.25 units of separation. So no melee unit in
+the roster can ever give or receive an elevation modifier, anywhere, on any
+tile — while §2 names high ground as decisive and §8.7 builds Cohort's core
+melee unit around holding a line.
+
+Confirmed real: eight Marksmen on a measured ridge beat eight identical
+Marksmen below **8–0** with 163.0 hp standing; the same eight on level ground
+annihilate each other. High ground works, for exactly one unit type. Break-even
+is nine low-ground units against eight high — worth about 12.5%, so "decides
+fights" overstates it and "worth a modest numerical deficit" is accurate.
+
+`elevationMultiplier` is not at fault. This is a scale mismatch between three
+numbers in three files that were never checked against each other:
+`HIGH_GROUND_THRESHOLD` (`sim/terrain.ts`), the amplitude of `terrainHeightAt`
+(same file), and weapon range (`data/units.ts`).
+
+**Three levers, all designer calls:** raise terrain amplitude ~1.26×, drop the
+threshold to ≤0.47, or lengthen melee reach. Raising the amplitude was
+implemented and then reverted — it works, but it silently invalidated the
+freshly written high-ground scenarios, and picking between three valid options
+is not a defect fix.
+**Status:** open, needs a designer decision.
+
+### B-010 · low · render · The descending skirt discloses the map's extent
+D-039 conceals unexplored ground so the board's size and shape must be scouted.
+The fog covers the top surface only; the polygon skirt around the rim is a plain
+material and is never concealed, so the board's outline is still faintly legible
+against the void before anything has been explored.
+**Status:** open.
+
+### B-008 · high · sim · The board is too small to contain the game
+Measured on a real match, seed 1337, with the AI opponent as `main.ts` sets it
+up:
+
+```
+nodes = 4, total resource 4800, all 4 inside a starting control radius (18)
+peak units on map, BOTH teams = 28
+match ended at 2.0 min by base destruction, 2760 resource unspent
+```
+
+Three design promises fail at once, and none of them is a balance problem:
+
+- **Expansion is inert.** Every resource node on the map already sits inside a
+  starting control radius, so §8.1's whole "expansion philosophy" row — the
+  thing that distinguishes the four races economically — has nothing to act on.
+- **D-006 is unreachable.** The 100+ unit performance target cannot be
+  exercised by any actual match; peak is 28 across *both* teams, a factor of
+  seven out. Every benchmark assuming large armies is untestable until this
+  changes.
+- **Pacing is an order of magnitude off.** §3 targets 10–15 minutes. Two.
+
+Note the resources were *not* exhausted — 2,760 of 4,800 remained. The match
+ended because a base fell, not because the map ran dry, so raising node amounts
+would fix nothing.
+
+**Fix direction:** D-038 — grow the board 7–16× in area, move its dimensions to
+`src/data/`, derive camera limits and fog resolution from the boundary instead
+of hardcoding them, and place resource nodes *outside* starting control radii so
+the extra space is a reason to expand rather than empty ground.
+**Status:** open, confirmed by direct measurement 2026-08-06.
+
 ### B-001 · low · render · Scenery and resource nodes use stock materials
 `sceneryViews.ts` and `nodeViews.ts` still build `MeshStandardMaterial`, so they
 do not match the painterly shading applied elsewhere. Cosmetic inconsistency,

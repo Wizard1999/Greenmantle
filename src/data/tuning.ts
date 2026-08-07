@@ -2,6 +2,44 @@
 // blueprint's scope-discipline note is explicit that systems get implemented
 // faithfully now and tuned at Phase 4.4.
 
+/**
+ * The battlefield's dimensions (D-038).
+ *
+ * **Nothing outside this block may assume the map's size.** It is content, not
+ * an engine constant, and a creator swapping in their own map
+ * (`ENGINE_VISION.md`) must not have to hunt through `sim/` and `render/` to do
+ * it. An audit on 2026-08-06 found five places that each independently knew how
+ * big the board was — a radius in `sim/mapBoundary.ts`, a size in
+ * `sim/terrain.ts`, a fallback in `render/camera.ts`, fixed camera limits in
+ * `render/cameraMath.ts`, and a fixed fog grid in `ui/fogOfWar.ts`. Each was a
+ * place where changing the map silently broke something else.
+ *
+ * `radius` was 39, which produced a board too small to contain the game:
+ * measured on a real match, four resource nodes all sitting inside a starting
+ * control radius, a peak of 28 units across both teams against D-006's 100+
+ * target, and a two-minute match against §3's 10–15 minute pacing. The designer
+ * set the floor at 7× the old area and the target at 15–16×; 156 is 4× the
+ * linear scale and therefore 16× the area.
+ */
+export const BATTLEFIELD = {
+  /** Nominal radius of the play area, before per-seed vertex jitter. */
+  radius: 156,
+  /**
+   * World units per fog cell. Fog resolution is derived from this and the
+   * boundary, so a larger map gets *more* cells rather than coarser ones — the
+   * previous fixed 48×48 grid would have grown from 1.6 to 6.5 units per cell
+   * at this scale, coarsening the fog exactly as the map became big enough to
+   * need it fine.
+   */
+  fogCellSize: 2.0,
+  /**
+   * How far outside the board the camera may travel, as a multiple of the map
+   * radius. The war table is an object in a void (D-014) and the player is
+   * expected to look at it from outside, so this is deliberately generous.
+   */
+  cameraReach: 1.35,
+} as const;
+
 export const BUILD = {
   // Flat rate whenever at least one assigned worker is present (assumption A8).
   // Deliberately NOT "more workers = faster": stacking workers to rush a

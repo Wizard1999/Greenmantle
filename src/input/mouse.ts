@@ -252,9 +252,17 @@ export function createMouse(deps: MouseDeps): void {
         return;
       }
 
-      // Hostile targets issue an explicit attack-approach order. Combat remains
-      // autonomous and deterministic; the units move toward the clicked threat
-      // and engage enemies they acquire along the route.
+      // Hostile targets issue an attack-move toward the threat, so the units
+      // engage what they meet on the way and close on the target itself.
+      //
+      // This used to issue a plain `cmdMove`, which sets `orderMode: 'move'` —
+      // the one mode that deliberately never diverts, because a move order is a
+      // destination the player named. The comment here claimed units would
+      // "engage enemies they acquire along the route" and they would not: they
+      // walked past everything to a fixed point and only ever fought whatever
+      // happened to end up within 0.9 of them. The flash still said "attack
+      // order". Right-click on an enemy is the gesture every RTS player reaches
+      // for first, and it was the one gesture that could not attack.
       const hostileUnitHit = picker.unitDeep();
       const hostileBuildingHit = picker.buildingDeep();
       const hostile = [hostileUnitHit, hostileBuildingHit]
@@ -267,12 +275,15 @@ export function createMouse(deps: MouseDeps): void {
         const targetBuilding = world.buildings.find(b => b.id === buildingId && b.team !== 'player');
         const target = targetUnit ?? targetBuilding;
         if (target) {
+          // Same command the A hotkey issues, so both routes to "attack that"
+          // behave identically — including that only non-gatherers take the
+          // attack-move mode, while workers in a mixed selection merely walk.
           issueCommand(
-            { t: 'move', units: sel, x: target.x, z: target.z },
-            () => cmdMove(world, sel, target.x, target.z),
+            { t: 'attackMove', units: sel, x: target.x, z: target.z },
+            () => cmdAttackMove(world, sel, target.x, target.z),
           );
           commandFeedback(hostile.point.x, hostile.point.y, hostile.point.z, 'attack');
-          flash(`attack order — ${targetUnit ? targetUnit.type : 'enemy structure'}`);
+          flash(`attack — ${targetUnit ? targetUnit.type : 'enemy structure'}`);
           return;
         }
       }

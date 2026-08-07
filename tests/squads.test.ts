@@ -1,5 +1,5 @@
 ﻿import { describe, it, expect } from 'vitest';
-import { peacefulMap, gatherOf, must, run, workersOf } from './helpers';
+import { buildSpotNearBase as spot, peacefulMap, gatherOf, must, run, workersOf } from './helpers';
 import {
   cmdAddChainStep, cmdClearChain, cmdFormSquad, cmdMove, cmdPlaceBuilding,
   cmdRemoveChainStep, cmdRunChain, cmdSetChainLoop, cmdStopChain,
@@ -144,7 +144,7 @@ describe('[27] Command gates simultaneous chains', () => {
     w2.resources.player = 10000;
     const ws2 = workersOf(w2, 'player');
     const builder = must(ws2[0]);
-    cmdPlaceBuilding(w2, 'player', 'outpost', -2, 6, [builder.id]);
+    cmdPlaceBuilding(w2, 'player', 'outpost', spot(w2).x, spot(w2).z, [builder.id]);
     run(w2, 400);                                  // let it finish
     expect(automationSlots(w2, 'player')).toBe(2); // (15 + 8) / 8 -> 2
 

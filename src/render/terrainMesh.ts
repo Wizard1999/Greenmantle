@@ -59,6 +59,46 @@ function buildPolygonTerrain(boundary: MapBoundary, segments: number): THREE.Buf
   return geometry;
 }
 
+/** How flat the shell is relative to its radius. */
+export const SHELL_FLATTEN = 0.34;
+
+/**
+ * Where the World Turtle's parts sit, so that none of it rises above the board
+ * it carries.
+ *
+ * Pure and exported so it can be tested without a GPU. The bug it exists to
+ * prevent is subtle and was shipped: the shell's radius scaled with the map
+ * while its Y position was a constant, so the carrier grew *upward through* the
+ * terrain as the board grew. Deriving every offset from the shell's own
+ * half-height makes "below the board" a property of the arithmetic rather than
+ * of four magic numbers that happened to suit one map size.
+ */
+export function worldSupportPlacement(span: number, bodyDepth: number): {
+  shellRadius: number;
+  shellHalfHeight: number;
+  shellTop: number;
+  shellY: number;
+  headY: number;
+  limbY: number;
+  tailY: number;
+} {
+  const shellRadius = span * 0.43;
+  const shellHalfHeight = shellRadius * SHELL_FLATTEN;
+  // Tucked just under the rim of the descending skirt, so the seam is hidden
+  // and nothing of the carrier is visible from directly above.
+  const shellTop = -bodyDepth * 0.98;
+  const shellY = shellTop - shellHalfHeight;
+  return {
+    shellRadius,
+    shellHalfHeight,
+    shellTop,
+    shellY,
+    headY: shellY + shellHalfHeight * 0.30,
+    limbY: shellY + shellHalfHeight * 0.10,
+    tailY: shellY + shellHalfHeight * 0.25,
+  };
+}
+
 function buildBoundarySkirt(boundary: MapBoundary, depth: number): THREE.BufferGeometry {
   const vertices: number[] = [];
   const indices: number[] = [];
@@ -95,7 +135,9 @@ export function buildTerrainMesh(scene: THREE.Scene, q: QualitySettings, mapSeed
   mesh.name = 'polygon-battlefield';
   scene.add(mesh);
 
-  const bodyDepth = 12;
+  // Scales with the board: a 12-deep rim reads as a table edge on a 78-wide
+  // map and as a sheet of paper on a 312-wide one.
+  const bodyDepth = Math.max(12, Math.max(boundary.bounds.width, boundary.bounds.depth) * 0.14);
   const skirt = new THREE.Mesh(
     buildBoundarySkirt(boundary, bodyDepth),
     new THREE.MeshStandardMaterial({ color: 0x11130f, roughness: 0.96, metalness: 0 }),
@@ -110,13 +152,27 @@ export function buildTerrainMesh(scene: THREE.Scene, q: QualitySettings, mapSeed
   const span = Math.max(boundary.bounds.width, boundary.bounds.depth);
   const shellMat = new THREE.MeshStandardMaterial({ color: 0x182019, roughness: 1, flatShading: true });
   const fleshMat = new THREE.MeshStandardMaterial({ color: 0x111712, roughness: 1, flatShading: true });
-  const shell = new THREE.Mesh(new THREE.SphereGeometry(span * 0.43, 18, 10), shellMat);
-  shell.scale.set(boundary.bounds.width / span * 1.18, 0.34, boundary.bounds.depth / span * 1.06);
-  shell.position.y = -8.8;
+  /*
+   * Every vertical placement below is derived from the shell's own size.
+   *
+   * They were absolute constants — shell at y = -8.8, head at -9.8, limbs at
+   * -10.2 — while the shell's *radius* scaled with the board. So the shell grew
+   * upward as the map grew: at the old 78-unit span its top already sat at
+   * +2.6, poking through the terrain, and on the 312-unit board it reached
+   * +36.8 and swallowed the battlefield whole. D-026 is explicit that the
+   * carrier stays "hidden or only subtly implied" during ordinary play and
+   * resolves only at cosmic zoom; a shell you look down onto instead of the
+   * ground is the opposite of that.
+   */
+  const place = worldSupportPlacement(span, bodyDepth);
+
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(place.shellRadius, 18, 10), shellMat);
+  shell.scale.set(boundary.bounds.width / span * 1.18, SHELL_FLATTEN, boundary.bounds.depth / span * 1.06);
+  shell.position.y = place.shellY;
   worldSupport.add(shell);
   const head = new THREE.Mesh(new THREE.SphereGeometry(span * 0.105, 10, 7), fleshMat);
   head.scale.set(1.3, 0.75, 0.8);
-  head.position.set(0, -9.8, -boundary.bounds.depth * 0.63);
+  head.position.set(0, place.headY, -boundary.bounds.depth * 0.63);
   worldSupport.add(head);
   const limbGeo = new THREE.SphereGeometry(span * 0.09, 9, 6);
   for (const [x, z, rz] of [
@@ -125,13 +181,13 @@ export function buildTerrainMesh(scene: THREE.Scene, q: QualitySettings, mapSeed
   ] as const) {
     const limb = new THREE.Mesh(limbGeo, fleshMat);
     limb.scale.set(1.45, 0.52, 0.75);
-    limb.position.set(boundary.bounds.width * x, -10.2, boundary.bounds.depth * z);
+    limb.position.set(boundary.bounds.width * x, place.limbY, boundary.bounds.depth * z);
     limb.rotation.y = rz;
     worldSupport.add(limb);
   }
   const tail = new THREE.Mesh(new THREE.ConeGeometry(span * 0.055, span * 0.24, 8), fleshMat);
   tail.rotation.x = Math.PI / 2;
-  tail.position.set(0, -9.6, boundary.bounds.depth * 0.65);
+  tail.position.set(0, place.tailY, boundary.bounds.depth * 0.65);
   worldSupport.add(tail);
   worldSupport.visible = false;
   scene.add(worldSupport);

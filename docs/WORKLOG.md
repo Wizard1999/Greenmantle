@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 4
-**State:** combat, spawn fairness and fog repaired · committed locally, unpushed
+**Round:** 5
+**State:** board rescaled 16×, tactical proof suite landed · committed locally, unpushed
 
 ## What finishing means
 
@@ -128,6 +128,79 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 5
+
+Four scenario builders turned §2's combat claims into 41 deterministic tests,
+three critics judged the rebuilt HUD from real screenshots, and the board grew
+16× in area. The scenarios are the important half, and the headline is not the
+green suite — most of those tests encode *measured current behaviour*, and
+several assert a shortfall.
+
+**Determinism is the only unqualified pass.** Two independently built copies of
+a 10-v-11 fight agree on `hash()` at every one of 600 ticks; `world.rngState` is
+1337 before a 489-tick engagement and 1337 after; four match seeds produce
+byte-identical outcomes. D-019 is delivered exactly as written.
+
+**Flanking: the multiplier is decisive, the manoeuvre does not exist.** Ten
+Legionnaires against ten, in contact, identical but for the defender's facing —
+front is mutual annihilation, side is 10–0 with 147.65 hp standing, rear is 10–0
+with 273.04. About **2.3° of facing** across `frontArc` is the whole difference
+between losing every model and losing none. But marching around behind an
+unengaged enemy is worth *exactly* zero: head-on and all-the-way-round produce
+not similar results but identical objects — same ticks, same survivors, same hp,
+at four separations, with zero rear-arc contact in either direction.
+
+The cause is one line. `movement.ts:32` writes `u.facing = atan2(dx, dz)`
+unconditionally every step: there is **no turn rate**. A defender is square-on
+long before its attacker is in reach. Flanking is earnable by exactly one route
+— pin the enemy first so its facing freezes — and that freeze is an *accident*,
+not a rule: `stepPursuit`'s stand-and-fight branch stops an engaged unit moving,
+and a unit that never moves never turns, because facing is only written by
+movement. The entire flanking pillar currently rests on an emergent side effect
+that no document describes.
+
+**High ground is a Marksman-only mechanic (B-009).** The largest height gap
+available anywhere at a Legionnaire's contact reach of 1.74 is 0.4797 against a
+0.6 threshold. Melee can never touch the mechanic. Raising the terrain amplitude
+fixes it and was implemented — then reverted, because it invalidated the
+high-ground scenarios written an hour earlier and because two equally valid
+alternatives exist. Choosing between three levers is a designer call, not a
+quiet patch.
+
+**Cohesion's penalty is self-repairing.** It punishes being at full strength
+rather than massing: ten deaths restore a thirty-stack to full effectiveness at
+tick 109 of a 432-tick fight, so a deathball is weak only while winning and
+recovers exactly as it starts losing — the reverse of the intended pressure.
+And "one mass" is `COHESION.radius` 8.0, so two visibly separate squads six
+apart are one deathball to the engine, which is the opposite of §8.6's
+"legible".
+
+**The default order destroys position.** `acquireRange` 9.0 exceeds a Marksman's
+effective reach of 8.26, so an idle Marksman acquires a target it cannot shoot,
+steps 0.38 units, and loses 30 ticks of settle — accuracy 0.95 → 0.35 for the
+deciding volley. The same ten defenders win 5–0 held and lose 0–5 unheld. §2
+says positioning decides fights; today the default behaviour throws the position
+away and nothing tells the player.
+
+**The board grew 16×** (D-038), and the rescale immediately exposed a design
+flaw scale had been hiding: `mapLayoutForBoundary` mixed *fractions* of the map
+edge with *absolute* lateral offsets, so starting resources moved from ~4 units
+off the base to ~17 and the opening economy stopped working. Anything near a
+base is now placed in world units — how far a worker walks on its first trip is
+a property of the game, not of how big the map is. Resources split into a home
+pair and an outer pair beyond any starting control radius, so expansion finally
+has somewhere to go.
+
+**The World Turtle was swallowing the board.** Its shell radius scaled with the
+map while its Y position was the constant −8.8, so it grew *upward through* the
+ground: top at +2.6 on the old map, +36.8 on the new one. Placement is now
+derived from the shell's own half-height, and asserted at four map sizes.
+
+Five separate fixtures across this round encoded pre-change behaviour — camera
+limits hardcoded to a 39-unit map, build sites named in absolute coordinates,
+scenarios asserting the high-ground shortfall. That is now a documented pattern
+rather than a surprise.
 
 ### round 4
 

@@ -1,5 +1,6 @@
 import type { Building, Unit, World } from '../core/types';
 import { pointInMapBoundary, type MapBoundary } from '../sim/mapBoundary';
+import { BATTLEFIELD } from '../data/tuning';
 
 export type FogState = 0 | 1 | 2; // unexplored, explored, visible
 
@@ -65,7 +66,19 @@ export class FogOfWarField {
   private readonly concealmentBuffer: Float32Array;
   private readonly blurBuffer: Float32Array;
 
-  constructor(readonly boundary: MapBoundary, columns = 48, rows = 48) {
+  /**
+   * Resolution is derived from the ground covered, never fixed (D-038).
+   *
+   * A constant 48×48 grid encoded the old 39-unit map: on the 156-unit board
+   * its cells would have grown from 1.6 to 6.5 world units, coarsening the fog
+   * exactly as the map became large enough to need it fine. What must stay
+   * constant is cell *size*, so a bigger map gets more cells.
+   */
+  constructor(
+    readonly boundary: MapBoundary,
+    columns = Math.round(boundary.bounds.width / BATTLEFIELD.fogCellSize),
+    rows = Math.round(boundary.bounds.depth / BATTLEFIELD.fogCellSize),
+  ) {
     this.columns = Math.max(8, Math.floor(columns));
     this.rows = Math.max(8, Math.floor(rows));
     const size = this.columns * this.rows;

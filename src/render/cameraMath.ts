@@ -1,3 +1,5 @@
+import { BATTLEFIELD } from '../data/tuning';
+
 export interface CameraState {
   focusX: number;
   focusZ: number;
@@ -23,19 +25,35 @@ export interface CameraOffset {
   z: number;
 }
 
-export const DEFAULT_CAMERA_LIMITS: CameraLimits = {
-  // Deliberately wider than the authored terrain: the battlefield is a physical
-  // table floating in a void, so the viewer may move beyond its edge and inspect
-  // it from miniature level through an almost map-like overhead view.
-  minX: -180,
-  maxX: 180,
-  minZ: -180,
-  maxZ: 180,
-  minPitch: Math.PI * 0.025,
-  maxPitch: Math.PI * 0.495,
-  minDistance: 2.5,
-  maxDistance: 520,
-};
+/**
+ * Camera limits for a board of a given radius.
+ *
+ * Derived rather than constant (D-038). The limits were fixed at ±180 pan and
+ * 520 maximum distance, which silently encoded a 39-unit map: on the 156-unit
+ * board those numbers would fence the player inside the middle of their own
+ * territory and refuse to pull back far enough to see it. Nothing outside
+ * `BATTLEFIELD` may know how big the map is.
+ *
+ * Pan reach deliberately exceeds the board: the battlefield is a physical table
+ * floating in a void (D-014), so the viewer is expected to move beyond its edge
+ * and look back at it.
+ */
+export function cameraLimitsFor(radius: number): CameraLimits {
+  const reach = radius * BATTLEFIELD.cameraReach;
+  return {
+    minX: -reach,
+    maxX: reach,
+    minZ: -reach,
+    maxZ: reach,
+    minPitch: Math.PI * 0.025,
+    maxPitch: Math.PI * 0.495,
+    minDistance: 2.5,
+    // Enough to frame the whole board with room to spare at any aspect ratio.
+    maxDistance: Math.max(120, radius * 3.4),
+  };
+}
+
+export const DEFAULT_CAMERA_LIMITS: CameraLimits = cameraLimitsFor(BATTLEFIELD.radius);
 
 export function clampCameraState(state: CameraState, limits = DEFAULT_CAMERA_LIMITS): CameraState {
   return {

@@ -34,6 +34,22 @@ export const run = (w: World, n: number): void => {
   for (let i = 0; i < n; i++) simStep(w);
 };
 
+/**
+ * A build spot a short walk from the player's Standard.
+ *
+ * Suites used to name a fixed world coordinate like `(-2, 6)`, which sat beside
+ * the base only because the whole board was 39 units across. When the map grew
+ * to 156 (D-038) that same point landed roughly seventy units away and every
+ * construction test failed, because the worker could not walk there inside the
+ * tick budget. Where a test builds is incidental to what it is testing; that it
+ * is reachable is not.
+ */
+export const buildSpotNearBase = (w: World, team: Team = 'player'): { x: number; z: number } => {
+  const base = w.buildings.find(b => b.team === team && b.type === 'standard');
+  if (!base) throw new Error('no Standard to build near');
+  return { x: base.x + 6, z: base.z + 6 };
+};
+
 export const workersOf = (w: World, team: Team): Unit[] =>
   w.units.filter(u => u.team === team && u.gather);
 
