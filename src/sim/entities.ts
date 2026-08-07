@@ -32,6 +32,8 @@ export function spawnUnit(
     stillTicks: 0,
     targetId: null,
     attackCd: 0,
+    pursuitFrom: null,
+    pursuitResume: null,
   };
   world.units.push(u);
   return u;

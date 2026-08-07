@@ -32,8 +32,15 @@ import type { TechId } from '../data/tech';
  * See docs/DECISIONS.md D-008 and D-012.
  */
 
-/** Bump when the meaning of a command or of a sim rule changes. */
-export const REPLAY_VERSION = 6;
+/**
+ * Bump when the meaning of a command or of a sim rule changes.
+ *
+ * 7 — combat resolves simultaneously instead of in array order (B-005), and
+ * units now pursue acquired targets under a leash (B-006). Both change what the
+ * same command stream produces, so every replay recorded before this would play
+ * out differently and must be rejected rather than silently replayed wrong.
+ */
+export const REPLAY_VERSION = 7;
 
 /**
  * Every player action, as plain serializable data.

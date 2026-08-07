@@ -247,13 +247,44 @@ function findEnemyBuilding(world: World, unit: Unit): Building | null {
 }
 
 /**
- * One tick of fighting.
+ * One tick of fighting, resolved simultaneously.
  *
  * Units defend themselves without being told to — the game is about intent, not
  * about remembering to press attack. A unit already under orders keeps walking;
  * it simply also shoots whatever comes into range.
+ *
+ * **Two phases, and the split is load-bearing (B-005).** This previously walked
+ * `world.units` applying `target.hp -= damage` in place. Because the loop skips
+ * units already at zero hp, a unit earlier in the array struck, killed, and its
+ * victim never swung back — so the whole engagement was decided by array
+ * position. Measured before the fix: two identical mirrored 10-unit forces
+ * resolved **10–0 for whichever team was pushed into `world.units` first**, in
+ * exactly 384 ticks either way, and reversing only the insertion order reversed
+ * the entire result.
+ *
+ * That is not a rounding error, it is the opposite of what §2 promises, and it
+ * silently invalidated every measurement taken on top of it. Note it was also
+ * perfectly *deterministic* — `determinism.test.ts` was green throughout, which
+ * is the lesson: determinism says a result repeats, not that it is fair.
+ *
+ * So: read every attacker's intent against the state at the start of the tick,
+ * then apply. Phase one mutates no hp, so cohesion, shield-wall and defense all
+ * evaluate identically for every attacker regardless of where it sits in the
+ * array. A unit that dies this tick still lands the blow it had already thrown,
+ * which is what makes mutual destruction possible and the mirror hold.
+ *
+ * Shuffling the array instead would have traded a systematic bias for a
+ * seed-dependent one and broken D-019's "no hidden randomness".
  */
 export function stepCombat(world: World): void {
+  // Accumulated per target so several attackers on one defender all land.
+  const unitDamage = new Map<EntityId, number>();
+  const buildingDamage = new Map<EntityId, number>();
+  const add = (into: Map<EntityId, number>, id: EntityId, amount: number): void => {
+    into.set(id, (into.get(id) ?? 0) + amount);
+  };
+
+  // --- Phase one: read. Nothing below writes hp. ---
   for (const u of world.units) {
     if (u.hp <= 0) continue;
     if (u.attackCd > 0) u.attackCd--;
@@ -264,7 +295,7 @@ export function stepCombat(world: World): void {
     if (u.attackCd > 0) continue;
 
     if (target && inRange(u, target.x, target.z, target.radius)) {
-      target.hp -= resolvedDamage(world, u, target);
+      add(unitDamage, target.id, resolvedDamage(world, u, target));
       u.attackCd = UNIT_TYPES[u.type].combat.attackTicks;
       continue;
     }
@@ -273,13 +304,100 @@ export function stepCombat(world: World): void {
     const building = findEnemyBuilding(world, u);
     if (building && inRange(u, building.x, building.z, building.radius)) {
       const mods = modifiersForUnit(world, u.team, u.type);
-      building.hp -= UNIT_TYPES[u.type].combat.damage
+      add(buildingDamage, building.id, UNIT_TYPES[u.type].combat.damage
         * mods.damageMul * mods.siegeMul
         * effectiveAccuracy(u)
         * cohesionEffectiveness(world, u)
-        * COMBAT.buildingDamageScale;
+        * COMBAT.buildingDamageScale);
       u.attackCd = UNIT_TYPES[u.type].combat.attackTicks;
     }
+  }
+
+  // --- Phase two: apply. Iterating the world arrays rather than the maps
+  // keeps the order of floating-point subtraction independent of insertion
+  // order, which a Map's own iteration order would not be (D-010). ---
+  for (const u of world.units) {
+    const damage = unitDamage.get(u.id);
+    if (damage !== undefined) u.hp -= damage;
+  }
+  for (const b of world.buildings) {
+    const damage = buildingDamage.get(b.id);
+    if (damage !== undefined) b.hp -= damage;
+  }
+}
+
+/**
+ * Close the distance to an acquired target (B-006).
+ *
+ * Acquire range is 9.0; a Legionnaire's weapon reach is 0.9. Without this step
+ * a unit sees an enemy from ten times further than it can hit one and nothing
+ * ever closes the gap — measured before the fix, two ten-unit lines thirty
+ * apart stood still for 3600 ticks and dealt no damage between them, while the
+ * selection card advertised "Attack Move — engage along route".
+ *
+ * The order contract is respected exactly as the commands define it:
+ *
+ * | mode | behaviour |
+ * |---|---|
+ * | `hold` | never moves. Hold position means hold position. |
+ * | `move` | never diverts. The player named a destination. |
+ * | `attackMove` | pursues, then resumes the route. |
+ * | `patrol` | pursues, then resumes the leg it was walking. |
+ * | `idle` | pursues in self-defence, then returns to where it was standing. |
+ *
+ * Workers never pursue. A mining camp that empties itself to chase a scout is
+ * a worse outcome than the scout escaping, and §8.2's whole promise is that
+ * workers do not need supervision.
+ *
+ * Pursuit is leashed to where it began rather than allowed to run: a target
+ * that keeps retreating stays inside `acquireRange` forever, so an unleashed
+ * chase would follow it across the map. Breaking off restores whatever
+ * destination the unit already had, so fighting never silently cancels an
+ * order.
+ *
+ * Runs after the reaper so nothing chases a corpse.
+ */
+export function stepPursuit(world: World): void {
+  for (const u of world.units) {
+    const disengage = (): void => {
+      if (u.pursuitFrom) {
+        // Resume the order that was interrupted, or fall back to the ground the
+        // unit left. Either way it does not simply stop where the chase ended.
+        u.target = u.pursuitResume ?? u.pursuitFrom;
+        u.pursuitFrom = null;
+        u.pursuitResume = null;
+      }
+    };
+
+    if (UNIT_TYPES[u.type].isWorker || u.orderMode === 'hold' || u.orderMode === 'move') {
+      disengage();
+      continue;
+    }
+
+    const target = u.targetId === null
+      ? null
+      : world.units.find(t => t.id === u.targetId && t.hp > 0) ?? null;
+
+    if (!target) { disengage(); continue; }
+
+    // Already able to shoot: stand and fight rather than walking into the
+    // target, which would break formation for no gain.
+    if (inRange(u, target.x, target.z, target.radius)) {
+      if (u.pursuitFrom) { u.target = null; }
+      continue;
+    }
+
+    const anchor = u.pursuitFrom ?? { x: u.x, z: u.z };
+    if (Math.hypot(target.x - anchor.x, target.z - anchor.z) > COMBAT.pursuitLeash) {
+      disengage();
+      continue;
+    }
+
+    if (!u.pursuitFrom) {
+      u.pursuitFrom = { x: u.x, z: u.z };
+      u.pursuitResume = u.target ? { x: u.target.x, z: u.target.z } : null;
+    }
+    u.target = { x: target.x, z: target.z };
   }
 }
 

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildOf, freshMap, gatherOf, must, run, workersOf } from './helpers';
+﻿import { describe, it, expect } from 'vitest';
+import { buildOf, peacefulMap, gatherOf, must, run, workersOf } from './helpers';
 import { simStep } from '../src/sim/world';
 import {
   cmdAssignBuilders, cmdCancelSite, cmdGather, cmdMove, cmdPlaceBuilding,
@@ -8,9 +8,9 @@ import { canPlaceBuilding } from '../src/sim/construction';
 import { supplyCap } from '../src/sim/supply';
 import { BUILDING_TYPES } from '../src/data/buildings';
 
-// [19] Queue & Walk — construction is walked to, not conjured (1.6)
+// [19] Queue & Walk â€” construction is walked to, not conjured (1.6)
 describe('[19] Queue & Walk', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const u = must(workersOf(w, 'player')[0]);
   const buildingsBefore = w.buildings.length;
@@ -37,9 +37,9 @@ describe('[19] Queue & Walk', () => {
   });
 });
 
-// [20] reassignment PAUSES, it does not cancel (the point of §8.1)
+// [20] reassignment PAUSES, it does not cancel (the point of Â§8.1)
 describe('[20] reassignment pauses, it does not cancel', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const u = must(workersOf(w, 'player')[0]);
   const res = cmdPlaceBuilding(w, 'player', 'outpost', -2, 6, [u.id]);
@@ -68,7 +68,7 @@ describe('[20] reassignment pauses, it does not cancel', () => {
 
 // [21] gathering and building are mutually exclusive
 describe('[21] gathering and building are mutually exclusive', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const u = must(workersOf(w, 'player')[0]);
   cmdGather(w, [u.id], must(w.nodes[0]).id);
@@ -90,7 +90,7 @@ describe('[21] gathering and building are mutually exclusive', () => {
 
 // [22] site cancellation and placement blocking
 describe('[22] site cancellation and placement blocking', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const u = must(workersOf(w, 'player')[0]);
   const res = cmdPlaceBuilding(w, 'player', 'outpost', -2, 6, [u.id]);
@@ -114,7 +114,7 @@ describe('[22] site cancellation and placement blocking', () => {
 // [23] multiple workers do not rush a build (assumption A8)
 describe('[23] multiple workers do not rush a build', () => {
   const timeWith = (n: number) => {
-    const w = freshMap();
+    const w = peacefulMap();
     w.resources.player = 10000;
     const ws = workersOf(w, 'player').slice(0, n).map(u => u.id);
     const placed = cmdPlaceBuilding(w, 'player', 'outpost', -2, 6, ws);

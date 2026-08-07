@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 1
-**State:** slice 0 building · nothing committed
+**Round:** 2
+**State:** combat repaired · slice 0 awaiting critique · committed locally, unpushed
 
 ## What finishing means
 
@@ -57,7 +57,19 @@ editor attached, which is the one outcome the design brief rules out.
 
 ### Tactical proof
 - **Bar:** `GAME_DESIGN.md` §2's own claims, as deterministic scenarios that must pass
-- **Status:** Queued
+- **Status:** Building
+
+Two of §2's claims are now testable for the first time, because until round 2 a
+mirrored fight was decided by array order and units could not advance to
+contact. Symmetry and advance-to-contact are covered.
+`tests/combatSymmetry.test.ts` and `tests/pursuit.test.ts` are the first two
+entries in the suite this piece needs.
+
+Still asserted only in prose: that flanking decides fights, that high ground
+does, that ambush and setup beat modest numerical superiority, and that a 30–40
+unit army only barely beats a 20–25 unit one. B-007 blocks the high-ground half
+— terrain is not rotationally symmetric, so a mirrored engagement is not yet a
+mirror in elevation.
 
 §2 asserts that flanking, high ground, ambush and terrain decide fights, and
 that a 30–40 unit army should only barely beat a 20–25 unit one. Exactly one of
@@ -116,6 +128,44 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 2
+
+Combat now works. Both blocking defects are fixed, each with a test that fails
+against the old code.
+
+**B-005, decided by array order.** `stepCombat` walked `world.units` applying
+`target.hp -= damage` in place, and skipped units already at zero — so a unit
+earlier in the array struck, killed, and its victim never swung back. Now two
+phases: every attacker reads its intent against the state at tick start, then
+all damage applies. A unit that dies this tick still lands the blow it had
+already thrown, which is what makes mutual destruction reachable and the mirror
+hold. The test asserts identical health on both sides at *every* tick, not
+merely at the end, because a bias that opens mid-fight and closes by the end
+would pass an endpoint check.
+
+**B-006, no advance to contact.** `stepPursuit` closes the ten-to-one gap
+between acquire range and weapon reach, leashed to where the pursuit began.
+The leash is the whole design question: unleashed, every skirmish becomes a
+map-wide rout and the win goes to whoever baits best, which is exactly the
+execution skill §2 rules out as the deciding factor. One tuning constant, one
+place. Re-running the original measurement — two ten-unit lines thirty apart —
+now goes 2400 HP to 254 where it previously dealt no damage at all in two
+simulated minutes.
+
+**Then it broke eleven tests, which was the most valuable thing that happened
+all round.** Construction, squad and supply suites had been passing *because*
+combat was broken: a lone worker could walk to a build site at mid-map because
+the enemy army, though well inside acquire range, could never reach it. With
+pursuit working the worker is hunted down and killed, and the site never
+completes. The instinct is to soften the mechanic; the correct read is that the
+fixture was wrong. Those suites now use `peacefulMap()`, which says plainly that
+their subject is not combat. A fixture that depends on a broken mechanic will
+defend that bug.
+
+Also corrected: `npm run verify` ran `check:site` *before* the tests, so it
+reported the previous run's result and printed "RED" on a green build. The
+publication step now runs after the tests it publishes.
 
 ### round 1
 

@@ -110,6 +110,13 @@ export function hash(world: World): string {
     }
     mix(u.build?.siteId ?? -1);
     mix(u.targetId ?? -1); mix(u.attackCd);
+    // Pursuit is real intent, not derived state: the leash anchor decides when
+    // a unit breaks off and the resume point decides where it goes next, so two
+    // peers disagreeing about either would diverge as soon as a chase ended.
+    mix(u.pursuitFrom ? 1 : 0);
+    mixF(u.pursuitFrom?.x ?? 0); mixF(u.pursuitFrom?.z ?? 0);
+    mix(u.pursuitResume ? 1 : 0);
+    mixF(u.pursuitResume?.x ?? 0); mixF(u.pursuitResume?.z ?? 0);
   }
 
   for (const b of world.buildings) {

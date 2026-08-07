@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { freshMap, must, run, workersOf } from './helpers';
+﻿import { describe, it, expect } from 'vitest';
+import { peacefulMap, must, run, workersOf } from './helpers';
 import {
   cmdCancelTrain, cmdGather, cmdPlaceBuilding, cmdTrain,
 } from '../src/sim/commands';
@@ -26,9 +26,9 @@ function remoteBuildablePoint(w: World): { x: number; z: number } {
 import { UNIT_TYPES } from '../src/data/units';
 import { MAX_QUEUE } from '../src/data/tuning';
 
-// [14] Command supply — cap, cost, and enforcement (1.5)
+// [14] Command supply â€” cap, cost, and enforcement (1.5)
 describe('[14] Command supply', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const base = must(w.buildings.find(b => b.team === 'player'));
   const capFromStructures = supplyCap(w, 'player');
   const startUsed = supplyUsed(w, 'player');
@@ -67,7 +67,7 @@ describe('[14] Command supply', () => {
 
 // [15] production queue
 describe('[15] production queue', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const base = must(w.buildings.find(b => b.team === 'player'));
   w.resources.player = 10000;
   const unitsBefore = w.units.length;
@@ -96,7 +96,7 @@ describe('[15] production queue', () => {
 
 // [16] outpost placement
 describe('[16] outpost placement', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const base = must(w.buildings.find(b => b.team === 'player'));
   const capBefore = supplyCap(w, 'player');
@@ -107,13 +107,13 @@ describe('[16] outpost placement', () => {
   const farAway = canPlaceBuilding(w, 'player', 'outpost', remote.x, remote.z);
   const res = cmdPlaceBuilding(w, 'player', 'outpost', remote.x, remote.z);
 
-  const poor = freshMap();
+  const poor = peacefulMap();
   poor.resources.player = 0;
 
   it('cannot place on top of an existing structure', () => expect(onStructure.ok).toBe(false));
   it('cannot place on an essence node', () => expect(onNode.ok).toBe(false));
   it('cannot place off the map', () => expect(offMap.ok).toBe(false));
-  it('CAN place far from home — Cohort walks, it does not project (A7)', () => {
+  it('CAN place far from home â€” Cohort walks, it does not project (A7)', () => {
     expect(farAway.ok).toBe(true);
   });
   it('placement succeeds', () => expect(res.ok).toBe(true));
@@ -130,7 +130,7 @@ describe('[16] outpost placement', () => {
 
 // [17] outposts work as drop-off points
 describe('[17] outposts work as drop-off points', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const node = must(w.nodes.find(n => n.x > 0));   // node on the RIVAL side, far from home
   const ws0 = workersOf(w, 'player');
@@ -153,7 +153,7 @@ describe('[17] outposts work as drop-off points', () => {
 
 // [18] control range is territory, not a build restriction (A7)
 describe('[18] control range is territory, not a build restriction', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   w.resources.player = 10000;
   const base = must(w.buildings.find(b => b.team === 'player'));
 

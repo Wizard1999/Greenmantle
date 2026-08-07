@@ -60,6 +60,20 @@ export const COMBAT = {
   rearArc: 1.05,       // ~60 deg either side of directly behind
   /** How far a unit will look for a target of its own accord. */
   acquireRange: 9.0,
+  /**
+   * How far a unit will chase, measured from where the pursuit began.
+   *
+   * Must exceed `acquireRange`, or a unit could acquire a target it is then
+   * forbidden to walk to — which is precisely the defect this fixes (B-006):
+   * acquire range is ten times weapon range, so without pursuit units stood and
+   * watched each other indefinitely.
+   *
+   * Bounded because the alternative is worse. An unleashed chase turns every
+   * skirmish into a map-wide rout and hands the win to whoever baits best,
+   * which is an execution skill (§2 rules those out as the deciding factor).
+   * One number, in one place, so the leash is cheap to retune.
+   */
+  pursuitLeash: 12.0,
   /** Damage a unit does to a building, as a fraction of its normal damage.
    *  Nothing in the Phase 1 roster is a siege unit, so everything chips. */
   buildingDamageScale: 0.5,

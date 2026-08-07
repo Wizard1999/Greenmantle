@@ -8,7 +8,7 @@ Format: severity · area · description · repro · status
 
 ## Open
 
-### B-005 · **blocking** · sim · A mirrored fight is decided entirely by array insertion order
+### B-005 · FIXED 2026-08-06 · sim · A mirrored fight is decided entirely by array insertion order
 Two identical 10-unit forces, mirrored, inside weapon reach, resolve **10–0 for
 whichever team was pushed into `world.units` first** — in exactly 384 ticks
 either way. Reversing only the insertion order reverses the entire result.
@@ -31,9 +31,14 @@ systematic bias for a seed-dependent one and breaks D-019's "no hidden
 randomness".
 **Repro:** spawn 10 legionnaires per team at ±0.36 on x, mirrored on z, run
 5400 ticks; swap the two `spawnUnit` calls and run again.
-**Status:** open, confirmed by direct measurement 2026-08-06.
+**Status:** **fixed.** `stepCombat` now resolves in two phases — every attacker
+reads its intent against the state at tick start, then all damage applies. A
+unit that dies this tick still lands the blow it had already thrown, so mutual
+destruction is reachable and the mirror holds. Guarded by
+`tests/combatSymmetry.test.ts`, which asserts identical health on both sides at
+*every* tick of a mirrored fight, not merely at the end. `REPLAY_VERSION` → 7.
 
-### B-006 · **blocking** · sim · Units acquire targets they can never reach
+### B-006 · FIXED 2026-08-06 · sim · Units acquire targets they can never reach
 `COMBAT.acquireRange` is 9.0; a Legionnaire's weapon range is **0.9**. A unit
 therefore sees an enemy from ten times further away than it can hit one — and
 nothing closes the gap. `stepCombat` writes `u.targetId`, but `stepMovement`
@@ -54,7 +59,24 @@ order a move target toward it, bounded by a leash so units do not chase across
 the map — and gated by `orderMode`, since a unit told to hold position must not
 wander. This is squad-level intent under D-003, so it belongs above the unit.
 **Repro:** the probe above; or in-game, attack-move past an idle enemy.
-**Status:** open, confirmed by direct measurement 2026-08-06.
+**Status:** **fixed.** `stepPursuit` (in `sim/combat.ts`, run after the reaper)
+gives a unit with an acquired target a move target toward it, leashed to
+`COMBAT.pursuitLeash` from where the pursuit began, and restores the
+interrupted destination on disengaging. The order contract is respected
+exactly: `hold` never moves, `move` never diverts, `attackMove` and `patrol`
+pursue and then resume their route, `idle` defends itself and returns. Workers
+never pursue. Re-running the original measurement — two ten-unit lines thirty
+apart under attack-move — now goes 2400 HP to 254 rather than dealing no damage
+at all. `REPLAY_VERSION` → 7.
+
+**It broke eleven tests, and that was the most useful thing it did.** Suites for
+construction, squads and supply were passing *because* combat did not work: a
+lone worker could stroll to a build site at mid-map because the enemy army,
+though well within acquire range, could never close. With pursuit working the
+worker is hunted and killed on the way. Those fixtures now use
+`peacefulMap()` — a world with no hostile army — which states the intent
+plainly. A fixture that depends on a broken mechanic is a fixture that will
+defend the bug.
 
 ### B-007 · high · sim · Terrain is not rotationally symmetric, so spawns are not equal
 §2 requires symmetric spawns. Sampling `terrainHeightAt` at 800 pairs of points

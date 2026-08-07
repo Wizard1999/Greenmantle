@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { freshMap, gatherOf, must, run, workersOf } from './helpers';
+﻿import { describe, it, expect } from 'vitest';
+import { peacefulMap, gatherOf, must, run, workersOf } from './helpers';
 import {
   cmdAddChainStep, cmdClearChain, cmdFormSquad, cmdMove, cmdPlaceBuilding,
   cmdRemoveChainStep, cmdRunChain, cmdSetChainLoop, cmdStopChain,
@@ -18,7 +18,7 @@ const squad1 = (w: World) => must(squadByNumber(w, 'player', 1), 'squad 1');
 
 // [24] squads are persistent groups, not selections (Q1)
 describe('[24] squads are persistent groups', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const ids = fighters(w);
   const formed = cmdFormSquad(w, 'player', ids, 1);
 
@@ -47,7 +47,7 @@ describe('[24] squads are persistent groups', () => {
 
 // [25] a chain runs unattended (blueprint 1.7 acceptance)
 describe('[25] a three-step chain runs unattended', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   cmdFormSquad(w, 'player', fighters(w), 1);
   const s = squad1(w);
   cmdAddChainStep(w, s.id, 'move', -4, 2);
@@ -76,13 +76,13 @@ describe('[25] a three-step chain runs unattended', () => {
 // [26] chains loop by default, with a per-chain toggle (Q3)
 describe('[26] chains loop by default', () => {
   it('a new squad loops by default', () => {
-    const w = freshMap();
+    const w = peacefulMap();
     cmdFormSquad(w, 'player', fighters(w), 1);
     expect(squad1(w).loop).toBe(true);
   });
 
   it('a looping chain returns to step 0 and keeps running', () => {
-    const w = freshMap();
+    const w = peacefulMap();
     cmdFormSquad(w, 'player', fighters(w), 1);
     const s = squad1(w);
     cmdAddChainStep(w, s.id, 'move', -6, 4);
@@ -100,7 +100,7 @@ describe('[26] chains loop by default', () => {
   });
 
   it('with loop off, the chain stops after the last step', () => {
-    const w = freshMap();
+    const w = peacefulMap();
     cmdFormSquad(w, 'player', fighters(w), 1);
     const s = squad1(w);
     cmdAddChainStep(w, s.id, 'move', -6, 4);
@@ -112,9 +112,9 @@ describe('[26] chains loop by default', () => {
   });
 });
 
-// [27] Command gates simultaneous chains (assumption A4, §8.3)
+// [27] Command gates simultaneous chains (assumption A4, Â§8.3)
 describe('[27] Command gates simultaneous chains', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const ws = workersOf(w, 'player');
   cmdFormSquad(w, 'player', fighters(w), 1);
   cmdFormSquad(w, 'player', ws.map(u => u.id), 2);
@@ -140,7 +140,7 @@ describe('[27] Command gates simultaneous chains', () => {
   it('only one chain is actually running', () => expect(runningSquads(w, 'player')).toBe(1));
 
   it('an outpost raises the cap and lets a second chain run', () => {
-    const w2 = freshMap();
+    const w2 = peacefulMap();
     w2.resources.player = 10000;
     const ws2 = workersOf(w2, 'player');
     const builder = must(ws2[0]);
@@ -159,9 +159,9 @@ describe('[27] Command gates simultaneous chains', () => {
   });
 });
 
-// [28] "continues until redirected" (§4)
+// [28] "continues until redirected" (Â§4)
 describe('[28] a chain runs until redirected', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const ids = fighters(w);
   cmdFormSquad(w, 'player', ids, 1);
   const s = squad1(w);
@@ -174,7 +174,7 @@ describe('[28] a chain runs until redirected', () => {
 
   it('was running before the order', () => expect(runningBefore).toBe(true));
   it('a manual order takes the squad off automation', () => expect(s.running).toBe(false));
-  it('the squad still exists — redirected, not disbanded', () => {
+  it('the squad still exists â€” redirected, not disbanded', () => {
     expect(squadByNumber(w, 'player', 1)).not.toBeNull();
   });
   it('and it can be restarted', () => {
@@ -185,7 +185,7 @@ describe('[28] a chain runs until redirected', () => {
 
 // [29] a gather step is ongoing, and works
 describe('[29] a gather chain step puts workers to work', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   const ws = workersOf(w, 'player');
   cmdFormSquad(w, 'player', ws.map(u => u.id), 1);
   const s = squad1(w);
@@ -200,7 +200,7 @@ describe('[29] a gather chain step puts workers to work', () => {
   it('workers are employed', () => {
     expect(ws.some(u => gatherOf(u).state !== 'idle')).toBe(true);
   });
-  it('the step is ongoing — the chain has not advanced past it', () => {
+  it('the step is ongoing â€” the chain has not advanced past it', () => {
     expect(s.index).toBe(0);
     expect(s.running).toBe(true);
   });
@@ -208,10 +208,10 @@ describe('[29] a gather chain step puts workers to work', () => {
 
 // [30] a step that cannot finish must not wedge the chain
 describe('[30] an unreachable step times out instead of deadlocking', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   cmdFormSquad(w, 'player', fighters(w), 1);
   const s = squad1(w);
-  // far outside the map — the squad can never arrive
+  // far outside the map â€” the squad can never arrive
   cmdAddChainStep(w, s.id, 'move', 5000, 5000);
   cmdAddChainStep(w, s.id, 'move', -6, 4);
   cmdRunChain(w, s.id);
@@ -223,7 +223,7 @@ describe('[30] an unreachable step times out instead of deadlocking', () => {
 
 // [31] chain editing
 describe('[31] chain editing', () => {
-  const w = freshMap();
+  const w = peacefulMap();
   cmdFormSquad(w, 'player', fighters(w), 1);
   const s = squad1(w);
 
@@ -262,7 +262,7 @@ describe('[31] chain editing', () => {
 // [32] squads clean up after themselves
 describe('[32] squads prune dead members', () => {
   it('a squad disbands once it has no members left', () => {
-    const w = freshMap();
+    const w = peacefulMap();
     const ids = fighters(w);
     cmdFormSquad(w, 'player', ids, 1);
     w.units = w.units.filter(u => !ids.includes(u.id));   // wipe the squad out

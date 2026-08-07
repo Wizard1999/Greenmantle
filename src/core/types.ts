@@ -65,6 +65,13 @@ export interface Unit {
   targetId: EntityId | null;
   /** Ticks until this unit may attack again. */
   attackCd: number;
+  /** Where a pursuit began. Doubles as the leash anchor — a unit may chase up
+   *  to `COMBAT.pursuitLeash` from here and no further, which is what stops a
+   *  skirmish turning into a map-wide rout. Null when not pursuing. */
+  pursuitFrom: Vec2 | null;
+  /** The destination to resume once a pursuit ends, so breaking off to fight
+   *  does not silently cancel the order that was already given. */
+  pursuitResume: Vec2 | null;
 }
 
 export interface QueueItem {

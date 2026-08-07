@@ -1,4 +1,4 @@
-import type { World } from '../core/types';
+﻿import type { World } from '../core/types';
 import { rngSeed } from '../core/rng';
 import { startTickForHour } from './daynight';
 import { MAP_VERSION } from './map';
@@ -7,7 +7,7 @@ import { stepBuild, stepConstruction } from './construction';
 import { stepGather } from './economy';
 import { stepMovement } from './movement';
 import { stepSquads } from './squads';
-import { stepCombat, stepReaper, stepSettle, stepVictory } from './combat';
+import { stepCombat, stepPursuit, stepReaper, stepSettle, stepVictory } from './combat';
 import { stepAi } from './ai';
 import { mapBoundaryForSeed } from './mapBoundary';
 import { stepMissions } from './missions';
@@ -56,7 +56,8 @@ export function simStep(world: World): void {
   for (const u of world.units) stepMovement(u, boundary); // goes there, never off the table
   stepSettle(world);                                   // ...and settles, or doesn't
   stepCombat(world);                                   // then fights
-  stepReaper(world);
-  stepMissions(world);                                 // drop squad ids the reaper just removed                                   // clear the dead before anything reads them
+  stepReaper(world);                                   // clear the dead before anything reads them
+  stepPursuit(world);                                  // close on what is still standing (B-006)
+  stepMissions(world);                                 // drop squad ids the reaper just removed
   stepVictory(world);                                  // and see if that ended it
 }
