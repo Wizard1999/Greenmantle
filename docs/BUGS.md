@@ -111,17 +111,40 @@ only ever found one *because* the terrain was asymmetric. Under the fix that
 search can never succeed. It now offsets the two positions independently. A test
 that passes only while a defect exists is a test defending the defect.
 
-### B-004 · medium · render · Fog of war renders as hard tiles
-The fog overlay is a coarse grid of instanced quads, so its edges are visibly
-square against painterly terrain — it reads as a checkerboard rather than
-concealment. The colour was fixed (was pure black, violating D-005's "shadows
-shift hue, never go black"; now deep violet-blue), but the tiling is
-structural.
-**Fix direction:** render fog to a texture and sample it smoothly, or blur the
-mask, rather than raising the grid resolution — more, smaller squares is still
-squares.
-**Repro:** load the game at any quality with default vision.
-**Status:** open. Colour corrected 2026-07-27; softness outstanding.
+### B-004 · FIXED 2026-08-06 · render · Fog of war renders as hard tiles
+"Hard tiles" undersold it. The overlay instanced one **flat** quad per grid cell
+— up to 2,304 — each parked at the terrain height of its own centre and scaled
+1.04× so neighbours overlapped. Over sloping ground that produced a staircase of
+terraces, z-fighting along every seam, and bright slivers of terrain punching
+through. At ordinary play distance it was the loudest thing on screen and it
+overwrote the painterly direction entirely.
+
+**Status: fixed, three separate causes.**
+
+1. **Geometry.** The fog now shares the terrain mesh's own geometry, lifted by
+   depth bias rather than in space. It is the same surface as the ground, so it
+   cannot step, cannot z-fight, and is clipped to the map polygon for free.
+2. **Mask.** `FogOfWarField.concealment()` returns a blurred scalar field
+   sampled with `LinearFilter`, so there are no cell edges. Raising the grid
+   resolution would not have worked — more, smaller squares are still squares.
+   Off-board cells are excluded from the blur rather than counted as concealed,
+   which would have dragged a dark band inward from the rim.
+3. **Colour.** The shader was writing raw linear values while every other
+   surface goes through tone mapping and linear-to-sRGB. That crushed the
+   intended deep violet to near-black — the exact D-005 violation the earlier
+   colour fix was supposed to have cured, reintroduced by a missing
+   `#include`. With the conversion restored the board stays legible as an
+   object against the void at war-table zoom.
+
+Scenery was also drawn fully lit on top of the fog, which read as trees floating
+in blackness and quietly disclosed the shape of unscouted terrain. Props on
+never-seen ground are now hidden; explored ground keeps them, which is what
+"explored" means.
+
+Draw calls at tactical distance fell from 150 to 106.
+**Guarded by:** `tests/fogSoftness.test.ts` — including an assertion that the
+mask takes many distinct values rather than the three a binary field can, which
+is the property that actually removes the cell edges.
 
 ### B-001 · low · render · Scenery and resource nodes use stock materials
 `sceneryViews.ts` and `nodeViews.ts` still build `MeshStandardMaterial`, so they

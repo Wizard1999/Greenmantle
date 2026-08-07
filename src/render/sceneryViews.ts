@@ -10,10 +10,25 @@ export interface SceneryViews {
   sync(camera: THREE.Camera, qualityTier: QualityTier): void;
 }
 
-export function buildSceneryViews(scene: THREE.Scene, world: World): SceneryViews {
+/** Just enough of the visibility controller to ask "may the player see this
+ *  ground?" — kept narrow so scenery does not gain a dependency on the whole
+ *  fog system. */
+export interface SceneryVisibility {
+  terrainKnown(x: number, z: number): boolean;
+}
+
+export function buildSceneryViews(
+  scene: THREE.Scene,
+  world: World,
+  visibility?: SceneryVisibility,
+): SceneryViews {
   const root = new THREE.Group();
   root.name = 'scenery-root';
   scene.add(root);
+
+  /** Each prop with its position, so concealment is a lookup rather than a
+   *  search through the scene graph every frame. */
+  const placed: Array<{ object: THREE.Object3D; x: number; z: number }> = [];
 
   const rockMat = rockMaterial();
   const trunkMat = barkMaterial();
@@ -27,6 +42,7 @@ export function buildSceneryViews(scene: THREE.Scene, world: World): SceneryView
       rock.rotation.set(s.spin, s.spin * 1.7, s.spin * 0.4);
       rock.castShadow = true;
       root.add(rock);
+      placed.push({ object: rock, x: s.x, z: s.z });
     } else {
       const tree = new THREE.Group();
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.22, 1.4, 6), trunkMat);
@@ -39,6 +55,7 @@ export function buildSceneryViews(scene: THREE.Scene, world: World): SceneryView
       tree.position.set(s.x, y, s.z);
       tree.rotation.y = s.spin;
       root.add(tree);
+      placed.push({ object: tree, x: s.x, z: s.z });
     }
   }
 
@@ -47,6 +64,16 @@ export function buildSceneryViews(scene: THREE.Scene, world: World): SceneryView
     sync(camera, qualityTier) {
       const lod = lodForDistance(camera.position.length(), qualityTier);
       root.visible = lod === 'close' || lod === 'tactical';
+      if (!root.visible || !visibility) return;
+
+      // Props on ground the player has never seen stay hidden. They were
+      // previously drawn fully lit on top of the fog, which looked like trees
+      // floating in a void and quietly told the player the shape of terrain
+      // they had not scouted. Remembered ground keeps its scenery — that is
+      // what "explored" means.
+      for (const item of placed) {
+        item.object.visible = visibility.terrainKnown(item.x, item.z);
+      }
     },
   };
 }

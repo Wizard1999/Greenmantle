@@ -16,6 +16,10 @@ export interface VisibilityController {
   stateAt: (x: number, z: number) => FogState;
   entityVisible: (team: Team, x: number, z: number) => boolean;
   resourceVisible: (x: number, z: number) => boolean;
+  /** Has this ground ever been seen? Static features — terrain props — are
+   *  remembered once explored, unlike entities, which must be currently in
+   *  sight. A tree does not move; an army does. */
+  terrainKnown: (x: number, z: number) => boolean;
 }
 
 /**
@@ -44,6 +48,9 @@ export function createVisibilityController(
       return mode === 'omniscient' || team === 'player' || fog.stateAt(x, z) === 2;
     },
     resourceVisible(x, z) {
+      return mode === 'omniscient' || fog.stateAt(x, z) > 0;
+    },
+    terrainKnown(x, z) {
       return mode === 'omniscient' || fog.stateAt(x, z) > 0;
     },
   };

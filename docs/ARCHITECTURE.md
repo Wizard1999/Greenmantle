@@ -96,7 +96,7 @@ Imports `core/` and `data/` **only**.
 | `siteViews.ts` | Construction sites in progress. |
 | `nodeViews.ts` | Resource nodes; shrink visibly as they deplete. |
 | `sceneryViews.ts` | Decorative rocks and trees; culled beyond tactical range. |
-| `fogOverlay.ts` | Instanced polygon-clipped fog, unexplored vs explored. |
+| `fogOverlay.ts` | Fog as one surface sharing the terrain's geometry, sampling a blurred mask with linear filtering. Not a grid of quads — that read as terraces and z-fought (B-004). |
 | `chainVisuals.ts` | Selected squad's behaviour chain drawn on the ground. |
 | `commandFeedback.ts` | Immediate click acknowledgement — fires on the frame of the click, before the tick applies it (D-004). |
 | `placementGhost.ts` | Building placement preview. |

@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 3
-**State:** combat and spawn fairness repaired · fog is next · committed locally, unpushed
+**Round:** 4
+**State:** combat, spawn fairness and fog repaired · committed locally, unpushed
 
 ## What finishing means
 
@@ -128,6 +128,34 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 4
+
+The fog, which the screenshots had made the obvious next target. `BUGS.md`
+called it "hard-tiled"; the actual construction was one **flat** quad per grid
+cell, up to 2,304 of them, each at the terrain height of its own centre and
+scaled 1.04× so neighbours overlapped — a staircase of terraces with z-fighting
+seams and terrain slivers punching through.
+
+Three causes, three fixes. The fog now shares the terrain mesh's geometry, so it
+is the same surface as the ground and cannot step or z-fight. The mask is a
+blurred scalar field sampled with linear filtering, so there are no cell edges
+at all — raising the grid resolution would not have helped, because more,
+smaller squares are still squares. And the shader was writing raw linear colour
+while every other surface goes through tone mapping and linear-to-sRGB, which
+crushed the intended violet to near-black: the exact D-005 violation an earlier
+colour fix had supposedly cured, reintroduced by a missing `#include`. That one
+is worth remembering — the previous fix changed the number and never checked
+what reached the screen.
+
+Two things fell out of it. Scenery had been drawn fully lit on top of the fog,
+which looked like trees floating in blackness and disclosed the shape of terrain
+the player had never scouted; props on never-seen ground are now hidden, while
+explored ground keeps them. And draw calls at tactical distance fell from 150 to
+106, because one shared surface replaced thousands of per-cell matrices rebuilt
+every frame.
+
+Verified by capture at all four distances rather than from the diff.
 
 ### round 3
 
