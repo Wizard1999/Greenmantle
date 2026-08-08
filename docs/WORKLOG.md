@@ -104,7 +104,7 @@ the painterly direction entirely.
 
 Not skipped. These are the items no agent can honestly close.
 
-- **stealth-detection** — The last open item from §11.1. Two designed units already assume it; the Chronicler is blocked, and with it D-020's Command Overload mitigation. The designer believes this was settled in conversation, but a full search of `docs/` on 2026-08-06 found only restatements of the question. It needs one written answer.
+- **unit-stealth** — Only the *unit-ability* half remains, and only Conclave's Phantom needs it. Deferred to Phase 3 with the roster redesign. The terrain half is settled in **D-040** and the Chronicler is unblocked by it.
 - **race-redesign** — The rosters are being reapproached. Conclave and Titanfolk naming waits on that; Adept, Channeler, Phantom and Archivist all pull back toward the humanoid reading D-031 rules out, but renaming ahead of the redesign would be wasted work.
 - **repo-rename** — A manual GitHub step. `START_HERE.md` warns an agent must not "correct" the remote to match the codename.
 - **machine-benchmarks** — Real low-, mid- and high-spec hardware is a long way off. Performance therefore has to be gated on machine-independent counters — draw calls, per-unit scans, triangle counts — with wall-clock recorded but never asserted, plus CPU throttling in the capture harness as a proxy. `BENCHMARKS.md` §5 already specifies it that way.

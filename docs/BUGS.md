@@ -146,6 +146,36 @@ Draw calls at tactical distance fell from 150 to 106.
 mask takes many distinct values rather than the three a binary field can, which
 is the property that actually removes the cell edges.
 
+### B-011 · high · balance · Turning is fast enough to make a flank worth one volley
+Adding a bounded turn rate fixed the manoeuvre (a march around the back is no
+longer worth literally zero) and, on the same change, collapsed the payoff at
+contact. A 10v10 whose defender faces entirely the wrong way was **10–0 in 336
+ticks**; it is now **mutual annihilation on tick 456** — the same result as
+attacking head-on. The flank is worth 21.94 HP out of a 1200 HP pool: **1.8%**.
+
+The cause is a ratio, and it is exact. `turnRate` 0.110 rad/tick gives a 30-tick
+about-face against `attackTicks` of 24, so a defender re-faces inside roughly
+one attack cycle and the bonus lands exactly once. The measured rear/side lead
+ratio is **2.3333**, which is `(1.35-1)/(1.15-1)` to four figures — the
+signature of precisely one boosted volley per model.
+
+Two consequences fall out of the same number. At ten a side, marching around the
+back still changes no *outcome*: 21.94 HP never crosses a 120 HP kill step, so
+the result deep-equals the head-on fight at every separation. It converts at
+three a side and nowhere else tested. And a lone flanker from acquire range
+lands nothing at all — the defender comes square-on at 3.40 separation while
+contact is 6 ticks later, so a defender turns faster than an attacker closes.
+
+**Fix direction, and it costs no responsiveness.** Turning already never gates
+movement, so slowing it is free against the "more responsive than StarCraft"
+requirement. Split the rate in two: keep the fast rate for turning toward travel
+(so movement still reads crisply) and give *re-facing toward a target* a much
+slower rate — around 0.037 rad/tick puts an about-face near 84 ticks, roughly
+three and a half volleys of rear exposure. That targets the fight without
+touching how the game feels to drive.
+**Status:** open. A balance number, and it would invalidate the flanking suite a
+second time, so it wants doing deliberately rather than at the end of a session.
+
 ### B-009 · high · balance · Melee units can never reach high ground
 Measured by sweeping the whole board at 0.25 spacing across 64 directions: the
 largest height difference available at a Legionnaire's contact reach of **1.74**

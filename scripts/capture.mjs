@@ -62,14 +62,18 @@ const SHOTS = [
     note: 'Close inspection — unit silhouette, material, weathering.',
     url: `${BASE}/index.html?capture=1`,
     atTick: seconds(45),
-    camera: { focusX: -12, focusZ: 7, yaw: 0.7, pitch: 0.36, distance: 9 },
+    // `onBase` frames the player's Standard. Naming absolute coordinates here
+    // silently pointed every shot at empty ground the moment the board grew
+    // (D-038) — the pictures still looked like plausible screenshots, which is
+    // exactly the failure mode this harness exists to avoid.
+    camera: { onBase: true, yaw: 0.7, pitch: 0.36, distance: 9 },
   },
   {
     name: 'tactical',
     note: 'Ordinary play distance. This is the one that has to read.',
     url: `${BASE}/index.html?capture=1`,
     atTick: seconds(45),
-    camera: { focusX: -12, focusZ: 7, yaw: 0.4, pitch: 0.9, distance: 42 },
+    camera: { onBase: true, yaw: 0.4, pitch: 0.9, distance: 42 },
   },
   {
     name: 'overview',
@@ -146,7 +150,10 @@ async function capture(browser, shot) {
        * screenshots, which is the dangerous part. Steer each frame until the
        * state actually converges, and report where it truly ended up.
        */
-      g.cam.focusAt(camera.focusX, camera.focusZ);
+      const base = g.world.buildings.find((b) => b.team === 'player' && b.type === 'standard');
+      const focusX = camera.onBase ? (base?.x ?? 0) : camera.focusX;
+      const focusZ = camera.onBase ? (base?.z ?? 0) : camera.focusZ;
+      g.cam.focusAt(focusX, focusZ);
       const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
       for (let i = 0; i < 600; i++) {

@@ -1127,6 +1127,78 @@ board revealed at the start.
 
 ---
 
+## D-040 — Concealment: dead ground and cover are two different mechanics
+**Date:** 2026-08-07 · **Status:** locked, from the designer · resolves the ambush half of `GAME_DESIGN.md` §11.1
+
+**Decision:** Terrain hides units in **both** of the ways real ground does, and
+they are deliberately not the same system:
+
+| | **Dead ground** | **Cover** |
+|---|---|---|
+| Cause | Elevation blocks line of sight | Terrain type — thicket, ravine, ruin |
+| Effect | Seen not at all | Seen only at short range |
+| Nature | Geometric and absolute | A reduction, never a binary |
+| Real analogue | You cannot see over the ridge | You can see into the wood if you are close |
+
+**Reason.** §2 lists ambush beside flanking and high ground as decisive, and
+nothing in the build delivers it — vision is a plain radius, so there is no
+ground on the map where an army can wait unseen. One mechanic would not have
+been enough: a ridge and a thicket conceal for genuinely different reasons, and
+collapsing them into one "stealth" value would lose the distinction a commander
+actually reasons about. Dead ground is a fact about geometry that both players
+can read off the terrain; cover is a gamble on how close the enemy gets.
+
+**The constraint that governs the implementation: it must be readable.** The
+designer's phrase is "the highest amount of easily readable reasonable
+variety" — variety is the goal, but legibility is the limit. Concretely:
+
+- **Cover is visible; what is in it is not.** A player can always see the
+  thicket. That is what makes moving past it a decision rather than a surprise.
+- **Dead ground is inferable from the terrain the player can already see.** If a
+  ridge blocks sight, the ridge is on screen. Nothing is hidden that has no
+  visible cause.
+- **A concealed unit that *is* detected must show why.** Otherwise the player
+  learns that units randomly fail to be seen, which is indistinguishable from a
+  bug.
+- **No randomness.** D-019 stands: detection is a deterministic function of
+  distance, terrain and vision, never a roll. An ambush that sometimes fails for
+  no readable reason is exactly the variance §2 rules out.
+
+**Consequence — and the parts that cost something:**
+
+1. **Vision stops being a circle.** `ui/fogOfWar.ts` tests radius only. Line of
+   sight has to sample terrain height along the ray from observer to cell. This
+   is the expensive part: on the 156-radius board (D-038) the fog grid is large
+   and this runs per vision source per frame. It needs a cheap silhouette walk
+   and probably a lower update cadence than the render loop, and it must be
+   profiled against D-006 before it ships. **This is the reason the feature is
+   not free**, and it should be built with the benchmark harness in hand.
+2. **Terrain gains declared types.** Thicket, ravine and open ground become map
+   data with a declared `concealment` value in `src/data/`, read generically —
+   never a check for a specific feature name inside `sim/` (D-029). Scenery is
+   currently decorative (`render/sceneryViews.ts`); cover makes some of it
+   gameplay, so it moves into the map definition rather than being generated
+   for looks.
+3. **It belongs to map generation.** D-034 put passes, cliffs and routes in the
+   generator's hands, and cover is the same kind of thing. Ambush positions are
+   a *generator* requirement: a map with no thickets on its approaches has no
+   ambushes, however good the mechanic is.
+4. **Detection range becomes a unit stat.** A scout sees further into cover
+   than a line unit does. That is the trait the Chronicler's "reveals stealth"
+   should become — see below.
+5. **The AI must obey it.** `sim/ai.ts` currently reads every unit and node
+   regardless of visibility, which its own header admits is "on trust". Ambush
+   is meaningless against an opponent that cannot be surprised, so this has to
+   land with the AI's information model, not before it.
+
+**What this does *not* decide.** Unit-level stealth as an ability — Conclave's
+Phantom, and whatever "illusions" turns out to mean — stays open. It is Phase 3
+and the roster is being reapproached. Cohort's **Chronicler** is unblocked by
+this decision: "reveals stealth" becomes "sees further into cover than anything
+else in the roster", which is a number rather than a new system.
+
+---
+
 ## D-032 — The HUD is one command surface; help is timed, not permanent
 **Date:** 2026-08-06
 

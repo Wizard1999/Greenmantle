@@ -88,6 +88,7 @@ Imports `core/` and `data/` **only**.
 | `painterly.ts` | The stylised shading model + `facet()`. Shadows shift hue, never go black (D-005). |
 | `materials.ts` | **Shared** painterly materials cached by role/team. One `ShaderMaterial` per unit would mean a shader compile per unit and would break the 100-unit target (D-006). |
 | `skyCycle.ts` | Sun/sky/fog derived from the sim clock. Read-only on the sim. |
+| `sunDisc.ts` | The key light made visible in the sky. Additive-only, depth-tested, never depth-writing, always at effective infinity — it cannot dim or occlude anything on the board. |
 | `quality.ts` | Low/medium/high tiers. The *look* is not tiered; the *cost* is. |
 | `lod.ts` | Camera-distance level of detail — real silhouettes close, strategic markers at table scale. |
 | `terrainMesh.ts` | Ground mesh, polygon skirt, World Turtle far-zoom silhouette (D-026). |

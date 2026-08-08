@@ -3,9 +3,10 @@ import { arena, fightOut, line, margin, tally, unitsOf } from './harness';
 import { cmdHoldPosition, cmdMove } from '../../src/sim/commands';
 import { COMBAT } from '../../src/data/tuning';
 import { UNIT_TYPES } from '../../src/data/units';
-import { elevationMultiplier, flankMultiplier } from '../../src/sim/combat';
+import { approachFrom, elevationMultiplier, flankMultiplier } from '../../src/sim/combat';
 import { hash } from '../../src/sim/snapshot';
 import { simStep } from '../../src/sim/world';
+import type { Approach } from '../../src/sim/combat';
 import type { Outcome, Placement } from './harness';
 import type { Team, UnitTypeKey, World } from '../../src/core/types';
 
@@ -22,6 +23,15 @@ import type { Team, UnitTypeKey, World } from '../../src/core/types';
  * 2.7x as hard as one still on its feet, and §8.7 says so in words: "accuracy
  * bonus stationary, penalty moving — rewards setup over kiting".
  *
+ * **Settle is no longer the only thing these scenarios measure.** Now that
+ * `turnRate` bounds how fast a unit comes about, facing is a second and
+ * independent axis of preparation: reversing costs a Marksman 26 ticks of
+ * turning and a Legionnaire 29, so a force caught pointing the wrong way cannot
+ * correct it inside the engagement that punishes it. That turns out to decide
+ * both scenarios where preparation used to look worthless — the drifting
+ * defence below, which used to be shot in the back by its own drift, and the
+ * Legionnaire, which had no way to earn a positional advantage at all.
+ *
  * **Three confounds had to be removed before any of this measures setup.** A
  * first attempt used long single-rank lines and lost with a *settled* defence
  * against equal numbers — not because setup is worthless but because a line
@@ -32,9 +42,14 @@ import type { Team, UnitTypeKey, World } from '../../src/core/types';
  * | confound | how it is held still | verified by |
  * |---|---|---|
  * | elevation | both blocks sit near the terrain crest, height spread 0.169 against a 0.6 threshold | `neutral ground` below |
- * | facing | both sides are spawned looking at each other, so nobody collects a flank bonus | `neutral ground` below |
+ * | facing | *ranged only.* Both sides spawn looking at each other and no Marksman ever turns more than 0.375 rad off that, so no flank bonus is collected | `neutral ground`, and the swing readings in `not told to hold` |
  * | crowding | every force is <= `COHESION.cap`, so no side is docked for packing | counts capped at 20 |
  * | shape | attackers march to individual slots, arriving in the same block the control uses | `block()` |
+ *
+ * The melee scenario is the exception and deliberately so: blocks at
+ * `MELEE_CONTACT` intermix, both sides end up behind each other, and the flank
+ * bonus is then part of what is being measured rather than a confound to
+ * suppress. That scenario reports its arcs instead of assuming them away.
  *
  * The attackers get one `cmdMove` each rather than one group order because
  * `cmdMove` fans a group onto a circle of radius up to 2.5 — which would change
@@ -129,6 +144,56 @@ function largestForceBeaten(defenders: number, hold: boolean, cap = 20): number 
     best = attackers;
   }
   return best;
+}
+
+interface FightReading {
+  /** Blows landed by each side, counted by the arc they came in from. */
+  blows: Record<Team, Record<Approach, number>>;
+  /** The furthest any unit of that side ever turned from where it spawned
+   *  looking, in radians. Compare against `COMBAT.frontArc` to see whether a
+   *  force could have been flanked at all. */
+  swing: Record<Team, number>;
+}
+
+/**
+ * Fight the world out, recording who struck whom from where.
+ *
+ * Outcomes alone cannot say *why* a defence held, and since facing became
+ * bounded that question decides two of the scenarios below. Blows are
+ * identified by the cooldown sitting at the full `attackTicks` — `stepCombat`
+ * resets it on exactly the tick a unit strikes, and nothing else writes it.
+ *
+ * A blow whose victim dies on the same tick is not counted: the reaper has
+ * already removed the target by the time this reads the world, and there is no
+ * arc to attribute it to. That undercounts the final tick of each fight
+ * identically for both sides, which is acceptable for a comparison and is why
+ * these totals are smaller than the damage actually dealt.
+ */
+function measureFight(world: World, maxTicks = 5400): FightReading {
+  const spawnFacing = new Map(world.units.map(u => [u.id, u.facing]));
+  const blows = {
+    player: { front: 0, side: 0, rear: 0 },
+    rival: { front: 0, side: 0, rear: 0 },
+  } as Record<Team, Record<Approach, number>>;
+  const swing = { player: 0, rival: 0 } as Record<Team, number>;
+  for (let tick = 0; tick < maxTicks; tick++) {
+    simStep(world);
+    for (const u of world.units) {
+      swing[u.team] = Math.max(swing[u.team], angleBetween(u.facing, spawnFacing.get(u.id)!));
+      if (u.attackCd !== UNIT_TYPES[u.type].combat.attackTicks) continue;
+      const struck = world.units.find(o => o.id === u.targetId);
+      if (struck) blows[u.team][approachFrom(u, struck)]++;
+    }
+    if (world.units.every(u => u.team === 'player') || world.units.every(u => u.team === 'rival')) break;
+  }
+  return { blows, swing };
+}
+
+/** Absolute angle between two headings, the short way round. */
+function angleBetween(a: number, b: number): number {
+  const tau = Math.PI * 2;
+  const d = Math.abs(a - b) % tau;
+  return d > Math.PI ? tau - d : d;
 }
 
 // ---------------------------------------------------------------------------
@@ -263,38 +328,68 @@ describe('preparation beats modest numerical superiority (§2)', () => {
     expect(overrun.survivors.rival).toBe(4);
   });
 
-  it('gives the whole advantage back if the defence is not told to hold', () => {
+  it('gives back the settle but not the facing if the defence is not told to hold', () => {
     // The mechanic, isolated. `COMBAT.acquireRange` is 9.0 and a Marksman
     // reaches 8.26, so an *idle* defender acquires a target it cannot yet shoot
     // and `stepPursuit` walks it 0.38 across that 0.74-wide band. Measured: the
     // defence sits at accuracy 0.95 until tick 118, steps forward on tick 119,
     // and is back at 0.35 for the volley that decides the fight. The attackers,
     // under an explicit move order, never divert — so the side that prepared is
-    // the side caught moving, and the result inverts.
+    // the side caught moving.
+    //
+    // That used to cost the defence the fight outright, and the reason was not
+    // the settle. With facing rewritten instantly every tick, a defender that
+    // drifted forward and then walked back to its anchor turned its back on the
+    // enemy for free, and the attackers put 15 of their 45 blows into it at
+    // `flankBonus` 1.35 — measured, on the pre-`turnRate` sim. A bounded turn
+    // rate removes that half of the penalty and only that half.
     const prepared = fightOut(setupVsArrival(10, 10, true));
     const drifting = fightOut(setupVsArrival(10, 10, false));
     expect(prepared.winner).toBe('player');
     expect(prepared.survivors.player).toBe(5);
-    expect(drifting.winner).toBe('rival');
-    expect(drifting.survivors.rival).toBe(5);
+    expect(drifting.winner).toBe('player');
+    expect(drifting.survivors.player).toBe(5);
 
-    // Not a rounding difference: unheld, ten prepared defenders cannot beat any
-    // force at all, down to and including one their own size.
-    expect(largestForceBeaten(10, false)).toBe(0);
+    // Same five models standing at the end, and that is the whole reason body
+    // count is the wrong yardstick here: the held defence finishes on 217.0 hp
+    // and the drifting one on 17.5, 8% of the health for the same nominal win.
+    // Losing the settle is now worth a mauling rather than the battle.
+    expect(prepared.hp.player).toBeCloseTo(217, 6);
+    expect(drifting.hp.player).toBeCloseTo(17.5, 6);
+
+    // Why the drift is survivable at all: the defence moves on 9 scattered
+    // ticks, never more than 3 consecutively, and 3 ticks at the Marksman's
+    // 0.125 rad/tick is 0.375 rad — 21.5°, comfortably inside the 60° front
+    // arc. Neither side ever lands a blow from anywhere but the front, so no
+    // part of this result is a flank bonus.
+    const drift = measureFight(setupVsArrival(10, 10, false));
+    expect(drift.blows.player).toEqual({ front: 55, side: 0, rear: 0 });
+    expect(drift.blows.rival).toEqual({ front: 50, side: 0, rear: 0 });
+    expect(drift.swing.player).toBeCloseTo(3 * MARKSMAN.turnRate, 6);
+    expect(drift.swing.player).toBeLessThan(COMBAT.frontArc);
+    expect(drift.swing.rival).toBe(0);
+
+    // What the hold order is worth, then: exactly one extra attacker. Unheld,
+    // ten defenders beat ten and nothing larger; held, they beat eleven.
+    expect(largestForceBeaten(10, false)).toBe(10);
+    expect(largestForceBeaten(10, true)).toBe(11);
   });
 
-  it('buys a Legionnaire nothing, because it has no accuracy gap', () => {
+  it('buys a Legionnaire nothing, and holding one still costs it the fight', () => {
     // The attribution control. A Legionnaire's accuracyStationary and
     // accuracyMoving are both 0.9, so settling cannot pay it — and it does not:
     // the same preparation that wins a Marksman fight 5-0 loses a Legionnaire
     // one 0-10, against equal numbers.
     //
-    // **This falls short of §2 for half the Phase 1 roster, and the mechanic at
-    // fault is `hold` rather than settle.** A held Legionnaire may never step,
-    // and melee reach is 1.74, so once its own front rank dies it can no longer
-    // touch anything; the attackers walk onto the survivors one at a time. Left
-    // idle the same ten lose 0-4 instead of 0-10, so for melee the prepared
-    // order is strictly worse than no order. Encoded as measured, not as wished.
+    // **§2's setup claim still does not hold for half the Phase 1 roster, and
+    // the gap between the prepared line and the unprepared one has widened in
+    // the wrong direction: from 4 models to 16.** The mechanic at fault is
+    // `hold` rather than settle. A held Legionnaire may never step, and melee
+    // reach is 1.74, so once its own front rank dies it can no longer touch
+    // anything: it lands 109 blows and takes 208. Both counts, and the hp it
+    // leaves the attackers on, are identical to the pre-`turnRate` sim — the
+    // cleanest evidence available that no facing rule rescues a unit that
+    // cannot close.
     const gap = MARKSMAN.combat.accuracyStationary - MARKSMAN.combat.accuracyMoving;
     const melee = UNIT_TYPES.legionnaire.combat;
     expect(gap).toBeGreaterThan(0.5);
@@ -304,9 +399,42 @@ describe('preparation beats modest numerical superiority (§2)', () => {
     expect(held.winner).toBe('rival');
     expect(held.survivors.rival).toBe(10);          // not one attacker lost
 
+    // What did change is the thing it is being compared against. Left idle, the
+    // same ten now *win* 6-0 where they used to lose 0-4, because manoeuvre
+    // finally buys something a scrum cannot take straight back: free to pursue,
+    // they land 20 rear-arc and 8 side-arc blows on a block that arrived under
+    // move orders and stopped. So the hold order does not merely fail to help a
+    // melee line, it inverts a 6-0 win into a 0-10 loss — a 16-model swing on
+    // the same twenty models and the same ground.
     const idle = fightOut(setupVsArrival(10, 10, false, 'legionnaire', MELEE_CONTACT));
-    expect(idle.winner).toBe('rival');
-    expect(idle.survivors.rival).toBe(4);           // still a loss, but a fight
+    expect(idle.winner).toBe('player');
+    expect(idle.survivors.player).toBe(6);
+
+    // And it buys manoeuvre, not invulnerability: eleven attackers put the same
+    // idle defence back to nothing.
+    const outnumbered = fightOut(setupVsArrival(10, 11, false, 'legionnaire', MELEE_CONTACT));
+    expect(outnumbered.winner).toBe('rival');
+    expect(outnumbered.survivors.rival).toBe(5);
+
+    // The arcs are the attribution, and they are the reason this reads as a §2
+    // result rather than a fluke: a held line never lands a blow outside the
+    // enemy's front arc, an idle one lands 28 of its 211 outside it. §2's
+    // positioning pillar therefore does reach melee — through the flank arc,
+    // and not through anything the word "setup" describes.
+    const heldBlows = measureFight(setupVsArrival(10, 10, true, 'legionnaire', MELEE_CONTACT)).blows;
+    const idleBlows = measureFight(setupVsArrival(10, 10, false, 'legionnaire', MELEE_CONTACT)).blows;
+    expect(heldBlows.player).toEqual({ front: 109, side: 0, rear: 0 });
+    expect(heldBlows.rival).toEqual({ front: 208, side: 0, rear: 0 });
+    expect(idleBlows.player).toEqual({ front: 183, side: 8, rear: 20 });
+    expect(idleBlows.rival).toEqual({ front: 159, side: 2, rear: 19 });
+
+    // Worth recording because it bounds how much of the above is flanking: with
+    // facing rewritten instantly, 208 of that fight's 297 blows landed in
+    // somebody's back and the winner was whoever spun fastest. Bounded turning
+    // cuts that to 39 of 391 — the flank is now earned by walking round a line
+    // that cannot come about, which is the mechanic §2 asks for.
+    const idleTotal = Object.values(idleBlows.player).concat(Object.values(idleBlows.rival));
+    expect(idleTotal.reduce((a, b) => a + b, 0)).toBe(391);
   });
 });
 

@@ -36,6 +36,7 @@ import { FogOfWarField, playerVisionSources } from './ui/fogOfWar';
 import { createVisibilityController, visibilityModeFromSearch } from './ui/visibility';
 import { createFogOverlay } from './render/fogOverlay';
 import { createTutorial } from './ui/tutorial';
+import { createSunDisc } from './render/sunDisc';
 import { mountControlsSheet } from './ui/controlsSheet';
 import { Recorder } from './sim/replay';
 import { configureLiveRecording, issueCommand } from './replay/live';
@@ -78,7 +79,10 @@ const views = {
   nodes: buildNodeViews(scene, world),
 };
 
-const cam = createCamera(terrainMesh, terrainPresentation.boundary);
+// Opens on the player's own Standard. A fixed coordinate would put a
+// first-time player's opening frame on empty ground (D-038).
+const playerStandard = world.buildings.find(b => b.team === 'player' && b.type === 'standard');
+const cam = createCamera(terrainMesh, terrainPresentation.boundary, playerStandard);
 const ghost = createPlacementGhost(scene);
 const ui = createUiState();
 const picker = createPicker(cam.camera, terrainMesh, views);
@@ -89,6 +93,10 @@ const chainVisuals = createChainVisuals(scene);
 const commandFeedback = createCommandFeedback(scene);
 const minimap = createMinimap(world, terrainPresentation.boundary, cam, fog, visibility);
 const tutorial = createTutorial(world, ui);
+// The light source made visible, so the shadows have a cause you can look at.
+// Additive-only and always at effective infinity — it cannot dim or occlude
+// anything on the board.
+const sunDisc = createSunDisc(scene);
 
 createMouse({
   world, domElement: renderer.domElement, cam, picker, ghost, ui, flash: hud.flash,
@@ -219,6 +227,7 @@ const loop = createLoop({
     renderer.toneMappingExposure = 0.85 + sky.light * 0.3;
     cam.pan(realDt, keyboard.keys, keyboard.mouseX, keyboard.mouseY);
     cam.update();
+    sunDisc.update(sky, cam.camera);
     fog.update(playerVisionSources(world));
     fogOverlay.update();
     const squadMemberIds = new Set(world.squads.flatMap(s => s.memberIds));

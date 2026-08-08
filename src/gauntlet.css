@@ -75,6 +75,25 @@ em { color: var(--bone); font-style: italic; }
 }
 .gauntlet-state.is-error { color: #ff9d8a; }
 
+/* Marks the moment the page changed under the reader. Brief and quiet: this is
+   a build log, and a status line that keeps pulsing is one people stop reading. */
+.gauntlet-state.is-updated {
+  color: var(--gold);
+  animation: state-updated 2.4s ease-out;
+}
+.gauntlet-state.is-updated::after {
+  content: ' · just updated';
+  color: var(--gold);
+}
+@keyframes state-updated {
+  0% { opacity: 0.35; }
+  12% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gauntlet-state.is-updated { animation: none; }
+}
+
 /* ---- Blocks -------------------------------------------------------------- */
 .gauntlet-block { margin-top: clamp(2.8rem, 6vw, 4.4rem); }
 .gauntlet-block > h2 {

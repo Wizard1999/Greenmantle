@@ -129,17 +129,57 @@ function fail(message: string): void {
   }
 }
 
-fetch('./data/progress.json')
-  .then((response) => {
-    if (!response.ok) throw new Error(String(response.status));
-    return response.json() as Promise<{ worklog: Worklog | null }>;
-  })
-  .then((data) => {
-    // Say so rather than rendering an empty page that looks like "no work
-    // happening" — an absent file and an idle loop are very different facts.
-    if (!data.worklog) throw new Error('no work log in progress.json');
-    render(data.worklog);
-  })
-  .catch((error: unknown) => {
-    fail(`Could not load the work log (${String(error)}). Run npm run sync:site.`);
-  });
+/**
+ * Poll for changes, so the page is watchable rather than merely accurate.
+ *
+ * It was accurate from the start — `npm run sync:site` regenerates
+ * `progress.json` on every verification run — but it only rendered once, so
+ * anyone with it open saw a snapshot frozen at whatever the state was when they
+ * loaded it. "Live" has to mean the page changes while you watch it, not that
+ * the data behind it is fresh if you remember to reload.
+ *
+ * Deliberately a poll rather than a websocket: this has to work from a plain
+ * static file server, and a build log that updates a few times an hour does not
+ * justify a socket. The fetch is conditional on content actually differing, so
+ * the DOM is only rebuilt when something really changed.
+ */
+const REFRESH_MS = 4000;
+let lastSeen = '';
+
+function load(initial = false): void {
+  fetch(`./data/progress.json?t=${Date.now()}`, { cache: 'no-store' })
+    .then((response) => {
+      if (!response.ok) throw new Error(String(response.status));
+      return response.text();
+    })
+    .then((text) => {
+      if (text === lastSeen) return;
+      lastSeen = text;
+      const data = JSON.parse(text) as { worklog: Worklog | null };
+      // Say so rather than rendering an empty page that looks like "no work
+      // happening" — an absent file and an idle loop are very different facts.
+      if (!data.worklog) throw new Error('no work log in progress.json');
+      render(data.worklog);
+      if (!initial) flashUpdated();
+    })
+    .catch((error: unknown) => {
+      if (initial) fail(`Could not load the work log (${String(error)}). Run npm run sync:site.`);
+    });
+}
+
+/** A brief mark on the status line, so a change that happens while the reader
+ *  is looking elsewhere is still noticed when they look back. */
+function flashUpdated(): void {
+  const state = el('[data-state]');
+  if (!state) return;
+  state.classList.add('is-updated');
+  window.setTimeout(() => state.classList.remove('is-updated'), 2400);
+}
+
+load(true);
+window.setInterval(() => load(), REFRESH_MS);
+// Catch up immediately when the reader comes back to the tab, rather than
+// making them wait out the poll interval.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') load();
+});

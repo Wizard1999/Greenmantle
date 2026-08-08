@@ -5,7 +5,7 @@ import { MAP_VERSION } from './map';
 import { stepProduction } from './production';
 import { stepBuild, stepConstruction } from './construction';
 import { stepGather } from './economy';
-import { stepMovement } from './movement';
+import { stepFacing, stepMovement } from './movement';
 import { stepSquads } from './squads';
 import { stepCombat, stepPursuit, stepReaper, stepSettle, stepVictory } from './combat';
 import { stepAi } from './ai';
@@ -54,6 +54,7 @@ export function simStep(world: World): void {
   for (const u of world.units) stepBuild(world, u);    // ...or where to build
   const boundary = mapBoundaryForSeed(world.mapSeed);
   for (const u of world.units) stepMovement(u, boundary); // goes there, never off the table
+  stepFacing(world);                                   // and comes about at its own rate
   stepSettle(world);                                   // ...and settles, or doesn't
   stepCombat(world);                                   // then fights
   stepReaper(world);                                   // clear the dead before anything reads them

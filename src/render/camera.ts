@@ -24,15 +24,29 @@ export interface RtsCamera {
   onResize: () => void;
 }
 
-export function createCamera(terrain?: THREE.Object3D, boundary?: MapBoundary): RtsCamera {
+export function createCamera(
+  terrain?: THREE.Object3D,
+  boundary?: MapBoundary,
+  /**
+   * Where the camera starts looking. Pass the player's own base.
+   *
+   * This was the hardcoded constant (-12, 7), which sat beside the base only
+   * because the whole board was 39 units across. Once the map grew (D-038) the
+   * same point was roughly seventy units of unexplored ground away, so a
+   * first-time player's opening frame was empty blackness with their army
+   * off-screen. Where the game starts looking is a property of where the player
+   * is, not of a coordinate that happened to work once.
+   */
+  initialFocus?: { x: number; z: number },
+): RtsCamera {
   // The table exists in a black void, so there is no atmospheric render cutoff.
   // A large far plane keeps the complete board and eventual World Turtle visible
   // even when the viewer pulls far outside the authored play surface.
   const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.05, 10000);
   const target = new THREE.Vector3();
   let state: CameraState = {
-    focusX: -12,
-    focusZ: 7,
+    focusX: initialFocus?.x ?? 0,
+    focusZ: initialFocus?.z ?? 0,
     yaw: 0,
     pitch: THREE.MathUtils.degToRad(52),
     distance: 40,
