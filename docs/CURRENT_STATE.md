@@ -47,192 +47,102 @@ player sees both words for one resource.
 
 ---
 
-## 🔑 SESSION HANDOFF — 2026-08-06 — read before starting work
+## 🔑 SESSION HANDOFF — 2026-08-08 — read before starting work
 
-**Paused mid-run at the designer's request, ahead of a usage limit. Resume from
-"Resume here" below.**
+**Paused at a usage limit, at a clean point. Everything is pushed.**
 
 ### Where things are
 
-- **369 tests · 72 modules documented · `npm run verify` green.**
-- **Working tree has substantial uncommitted work.** It is committed locally on
-  branch `session/2026-08-06-gauntlet` — see the commit for the full diff.
-  **Nothing has been pushed.** The designer has not authorised a push.
-- The dev server runs on `:5173`. `npm run capture` needs it running.
+- **514 tests · 74 modules documented · `npm run verify` green.**
+- **Pushed** to `origin/session/2026-08-06-gauntlet` at `b7aac00`, 7 commits.
+  Local and remote HEAD verified identical. `main` is untouched — open a PR
+  when you want it merged.
+- Repository lives at `O:\_Homeostasis\Greenmantle`. A shell cwd of
+  `O:\_Greenmantle` is stale; the repo did not move.
 
-### The three things that matter most
+### What this session did, in one list
 
-**1. Combat does not work, and this is now proven rather than suspected.**
-Three blocking defects, each confirmed by direct measurement this session and
-written up with repros in `BUGS.md`:
+Combat did not work when the session began, and this was proven rather than
+suspected. All of it is fixed and guarded:
 
-- **B-005** — a mirrored 10v10 resolves **10–0 for whichever team was pushed
-  into `world.units` first**, in exactly 384 ticks either way. `stepCombat`
-  walks the array applying damage immediately, so an earlier unit strikes,
-  kills, and its victim is gone before it swings back. This is not RNG (D-019
-  removed all of it). It invalidates §2's "no spawn point has an inherent
-  advantage" and silently invalidates every combat measurement taken on top of
-  it. **Fix: two-phase resolution** — read all attack intents against tick-start
-  state, then apply, then reap. Do **not** shuffle the array; that trades a
-  systematic bias for a seed-dependent one and breaks D-019.
-- **B-006** — `COMBAT.acquireRange` is 9.0; a Legionnaire's weapon range is
-  **0.9**. Units see enemies ten times further than they can hit them and
-  nothing closes the gap: `stepCombat` writes `u.targetId`, `stepMovement` reads
-  only `u.target` (a position), and nothing converts one to the other. Measured:
-  two 10-unit lines 30 apart, 3600 ticks, **zero damage, zero movement**. The
-  selection card advertises "Attack Move — engage along route", which is false.
-  **Fix needs a designer call on leash length** — unbounded pursuit turns every
-  skirmish into a map-wide rout. Recommendation: leashed pursuit gated by
-  `orderMode` so hold-position never wanders, leash as a `tuning.ts` value.
-- **B-007** — terrain is not rotationally symmetric. 800 mirrored point-pairs
-  across 200 seeds: mean height delta **0.69**, worst **1.36**, 600/800 differ
-  by >0.01. With `highGroundBonus` 1.25 / `lowGroundPenalty` 0.85 one spawn owns
-  high ground for free. Existing tests assert *position* symmetry only.
+- **B-005** — a mirrored 10v10 resolved **10–0 for whichever team entered
+  `world.units` first**. `stepCombat` now resolves in two phases.
+- **B-006** — acquire range 9.0 against a weapon reach of 0.9, and nothing
+  closed the gap: two lines 30 apart dealt *zero* damage in 3600 ticks.
+  `stepPursuit` closes it under a leash.
+- **B-007** — terrain height was not symmetric, so one spawn held free high
+  ground. Rebuilt from terms even under 180° rotation, so symmetry is now a
+  property of the formula's shape rather than of tuned coefficients.
+- **B-004** — fog drew one flat quad per cell and read as stair-stepped
+  terraces. Now one surface sharing the terrain geometry, blurred mask, linear
+  filtering. Draw calls 150 → 106.
+- **B-011 / B-009** — the two approved balance levers. Flank at contact went
+  from mutual annihilation to 10–0; melee can reach high ground for the first
+  time.
+- **Missions stopped being inert (D-041)** and got their first interface.
 
-**Determinism is not fairness.** `determinism.test.ts` was green through all of
-this. A fight decided by array order is perfectly deterministic and perfectly
-unfair. Symmetry needs its own assertions.
+### The pattern worth carrying forward
 
-**2. Seven held-back items were answered by the designer and are now written
-down.** Four were §11.1 questions that had been answered in conversation but
-never reached a file — a fresh session cannot tell an unrecorded answer from an
-unmade decision. `DECISIONS.md` now opens with a standing note about this.
-D-031 (no race is humanoid), D-032 (HUD is one surface), D-033 + D-033a
-(resource schema; Material is loose, which is an *engine* requirement), D-034
-(terrain is terrain), D-035 (air shares supply), D-036 (World Turtle confirmed),
-D-037 (night/biome/weather affect play, symmetric).
+**When a fix breaks tests, read the tests before softening the fix.** It
+happened five times this session. Construction, squad and supply suites passed
+only *because* combat was broken. A `phase1` test searched for an elevation gap
+between a point and its exact mirror — which only ever succeeded because the
+terrain was asymmetric. The tactical suite documented shortfalls that later
+fixes removed. Fixtures that depend on a defect will defend it.
 
-**3. Scope narrowed by the designer: get Cohort and Mycora working at a basic
-level.** Conclave and Titanfolk wait for a roster redesign. Do not spend effort
-on their naming or art.
-
-### New tooling — read before trying to look at the game
-
-`npm run capture` drives a real headless Chromium and writes reproducible
-screenshots to `.capture/` (gitignored) plus an `index.json` manifest.
-
-**You will probably need it.** Editor-embedded browser surfaces here report
-`document.hidden` and fire **zero** `requestAnimationFrame` callbacks — the
-render loop never runs, every screenshot is black, and that is indistinguishable
-from a genuinely broken game. Do not diagnose a "broken build" from a black
-screenshot without checking `document.hidden` first.
-
-Shots name an exact camera state and tick, driven through `loop.stepOnce()` and
-the camera's public methods, so there is no capture-only render path. A
-`window.__greenmantle` handle exists **only** under `?capture=1`.
-
-### Interrupted work, resumable
-
-The slice-0 HUD gauntlet was stopped mid-critique to avoid a usage limit. The
-**builder finished and its work is in the tree** (`controlsSheet.ts`,
-`debugReadout.ts`, D-032, HUD rebuild). The three critics and the synthesis step
-did not complete. Resume with:
-
-```
-Workflow({ scriptPath: "<session>/workflows/scripts/slice0-interface-truth-wf_86a44b30-34e.js",
-           resumeFromRunId: "wf_86a44b30-34e" })
-```
+Related: **determinism is not fairness.** `determinism.test.ts` was green while
+a fight was decided by array order. Symmetry needs its own assertions.
 
 ### Resume here — priority order
 
-1. **B-005, two-phase combat resolution.** Nothing else about combat can be
-   measured until this is fixed. Add a symmetry test that fails today.
-2. **B-006, pursuit.** Needs the leash decision first — ask, do not guess.
-3. **B-007, symmetric terrain.** Make `terrainHeightAt` symmetric under the same
-   rotation the boundary already uses, and assert height symmetry.
-4. **Finish slice 0** — resume the critic phase above.
-5. **B-004, the fog.** Now the loudest thing on screen at every zoom: stair-
-   stepped terraces with terrain slivers punching through. `BUGS.md` calls it
-   "hard-tiled", which understates it.
-6. **Mycora**, per the narrowed scope.
+1. **Check the mission panel does not overlap at 1366x768 and 1280x800**, and
+   that it accepts pointer events. Its own integration check never ran (session
+   limit). The research panel shipped completely unreachable because it
+   inherited `pointer-events: none` and nobody looked.
+2. **The tutorial teaches the wrong game.** All seven steps are select / gather
+   / train / move / camera. Not one covers missions, doctrine or terrain — the
+   things the project exists for. The rewind bug is fixed; the content question
+   is open and is a designer call.
+3. **Nothing on the battlefield reports damage.** `grep -rniE "health|hp"
+   src/render src/ui` returns nothing. A player cannot tell who is winning a
+   fight except by counting corpses.
+4. **The AI is omniscient.** `sim/ai.ts` reads every building and node
+   regardless of visibility — its own header admits this is "on trust".
+   D-040's ambush work is meaningless against an opponent that cannot be
+   surprised, so these land together.
+5. **D-040 terrain concealment** — dead ground and cover. Vision stops being a
+   circle; profile it against D-006 rather than writing it optimistically.
 
-### The one open designer question
+### Tooling you will need
 
-**Stealth / detection.** Every other §11.1 item is now resolved. The designer
-believes this was settled in conversation; a full search of `docs/` on
-2026-08-06 found only restatements of the question, never an answer. It blocks
-the Chronicler, and through it D-020's Command Overload mitigation. One written
-sentence closes it.
+`npm run capture` drives real headless Chromium and writes reproducible
+screenshots to `.capture/`. **Use it.** Editor-embedded browsers here report
+`document.hidden` and fire zero `requestAnimationFrame` callbacks, so the render
+loop never runs and every screenshot is black — indistinguishable from a
+genuinely broken game. Do not diagnose from a black frame without checking
+`document.hidden` first.
+
+The live build log is `/gauntlet.html`, published from `docs/WORKLOG.md` by
+`npm run sync:site`. It polls, so it updates without a reload.
+
+### Still open for the designer
+
+- **unit-stealth** — the ability half only; Conclave's Phantom. Terrain
+  concealment is settled in D-040 and the Chronicler is unblocked.
+- **race-redesign** — rosters being reapproached; Conclave/Titanfolk naming
+  waits on it.
+- **repo-rename**, **machine-benchmarks**, **hosting/analytics**.
 
 ### Environment hazards
 
-1. **The verification gate did not run on Windows.** `check-docs.mjs` resolved
-   its root via `new URL('..', import.meta.url).pathname`, which yields `/O:/…`
-   and joins into `O:\O:\…`. Fixed. It immediately caught real drift, which
-   means the previous session pushed without a green gate.
-2. **The git remote resets.** Unchanged from the previous handoff — always
-   `git remote -v` before trusting a push.
-3. **Usage limits interrupt workflows mid-run.** Both workflows this session hit
-   one. `resumeFromRunId` replays completed agents from cache; use it
-   immediately rather than reporting the failure and moving on.
+1. **The git remote resets** between container recreations. Always
+   `git remote -v` before trusting a push. It read correctly this session.
+2. **Usage limits interrupt workflows mid-run.** Use `resumeFromRunId`
+   immediately rather than reporting the failure and moving on — completed
+   agents replay from cache.
+3. `check-docs.mjs` and `check-site-sync.mjs` are the only things standing
+   between a rename and a silently stale public page. Do not weaken them.
 
-### Superseded from the previous handoff
-
-- "Research UI is the single biggest gap" — **done**, and it was worse than
-  recorded: the panel shipped with `pointer-events: none` inherited from
-  `.panel`, so every research button passed clicks through to the canvas. It was
-  unreachable, not merely occluded. Now visible and clickable.
-- "340 tests · 68 modules" — now 369 · 72.
-- **D-026 World Turtle no longer needs confirming.** D-036 confirms it.
-
-### Known environment hazards
-
-1. **The git remote resets.** Containers are recreated between sessions and
-   re-clone from the *original* repo (`Wizard1999/RTS`), silently resetting
-   `origin`. This happened **three times** in one session and sent commits to
-   the wrong repository. A push to the wrong remote **reports success**.
-   Always `git remote -v` before trusting a push. Fix in `START_HERE.md § 0`.
-2. **Tag pushes are blocked.** `git push origin <tag>` fails with a proxy
-   disconnect/403 — a different permission from repository contents, which
-   works fine. `v1.12.0` exists locally and could not be published. Not worth
-   chasing: the authoritative version lives in `package.json` and `VERSION`.
-   If tags matter later, create the release through the GitHub web UI.
-3. **Pushes to `main` intermittently reject** as non-fast-forward even when a
-   clean fast-forward is available. Retrying later has worked every time. Do
-   not force-push in response to this.
-
-### Decisions taken without designer review
-
-- **D-026 "World Turtle"** — the far-zoom world silhouette — arrived in an
-  external import, not from the designer, and is recorded as a *locked*
-  presentation direction. It is a real scope addition. **Worth confirming it is
-  wanted** before more art is built on it.
-
-### Immediate next work, in priority order
-
-1. **Research UI.** The tech system (D-028) is complete, hashed and replayed —
-   and no player can reach it. A whole system is invisible. This is the single
-   biggest gap between "Phase 1 complete" and "an alpha that makes sense".
-2. **Dev console.** Last unchecked Phase 1 roadmap item; already specced in
-   `TODO.md`. Must route through `sim/commands.ts` and be recorded into the
-   replay stream, or replays of dev sessions desync.
-3. **Soften the fog** (B-004). Colour was fixed (it was pure black, violating
-   D-005); the hard tiling is structural and remains.
-4. **Outrider unit.** Highest-value roster addition: flanking mechanics already
-   exist in combat and nothing currently exploits them.
-
-### Which model to use
-
-Not everything here needs the strongest model. From experience across this
-project:
-
-- **Needs the strong model:** anything touching `src/sim/` (determinism is
-  subtle and fails silently), the replay/hash format, the mission→squad
-  behaviour design, the race-roster abstraction, and vetting external imports.
-- **Fine for a cheaper model:** new units and views following existing
-  patterns, CSS and landing-page work, documentation prose, tests for systems
-  that already have an established test shape, `.bat` launchers.
-
-### Still pending on the designer
-
-- **Rename the GitHub repository** to match the Greenmantle codename. Until
-  then `origin` must stay `Wizard1999/Greenmantle` (D-030 explains why an agent
-  must not "correct" this).
-- Four design blockers remain unanswered in `GAME_DESIGN.md § 11.1` — resource
-  naming, stealth/detection, map geometry, air-vs-supply. Each blocks specific
-  work listed in `TODO.md`.
-
----
 
 ## ⚡ Latest — renamed to Greenmantle; painterly pass on units and buildings
 
