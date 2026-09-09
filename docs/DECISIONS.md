@@ -1283,3 +1283,162 @@ viewport-dependent. At 1920x1080 the battlefield holds **90.5%**, inside
 even after a media query tightens the whole console. Going further means
 shrinking the selection card or the minimap past legibility, which is the wrong
 trade — but the gap is real and is not closed.
+
+---
+
+## D-041 — A mission layers over a squad's chain; it never overwrites one
+**Date:** 2026-08-08 · resolves the question D-027 deferred
+
+**Decision:** A mission changes what its assigned squads do. Three rules, and
+the third is what finally gives the fallback position a meaning:
+
+1. **A mission supplies behaviour to a squad that has none running.** The squad
+   moves, fights, patrols or gathers with no chain written for it.
+2. **A mission never overwrites a chain the player wrote and started.** If the
+   squad is running its own chain, the mission says nothing about *how*.
+3. **A mission governs withdrawal in both cases.** Below a fraction of the
+   force's own high-water strength, its squads break off for the mission's
+   fallback position — overriding a hand-written chain, because "withdraw below
+   this" is a thing the player said too.
+
+**The question D-027 asked** was whether a mission overrides the squad's chain,
+layers on top of it, or replaces the need for one. The answer is *layer, and
+supply when there is nothing to layer over* — rules 1 and 2 taken together.
+
+**Why not override.** Overriding is the least code and it throws away work the
+player did. It also puts the chain editor and the mission panel in permanent
+conflict over the same squad: a player who writes a route and then names an
+objective watches the route evaporate with nothing on screen to say why. The
+chain answers "how"; the mission answers "why". A layer that discards the more
+specific answer is not a layer.
+
+**Why not require a chain.** The opposite failure. It makes the mission panel a
+labelling exercise — ordering an assault would change nothing until the player
+also did the Level 3 work — and `UI_BLUEPRINT.md` calls missions "the primary
+gameplay layer" and doctrine editing "optional for beginners". A layer nobody
+can use without the layer above it is not primary.
+
+### The objective works out its own ground
+
+The player names what a squad is *for*; the simulation works out where. That is
+D-003 as a mechanism rather than an aspiration:
+
+| Objective | Posture | Ground it resolves to |
+|---|---|---|
+| `assault` | press | nearest enemy structure |
+| `expand` | press | nearest resource outside friendly control |
+| `defend` | hold | nearest structure the team already holds |
+| `escort` | hold | *(nothing — see below)* |
+| `scout` | observe | nearest enemy structure, paced to and back |
+| `harvest` | work | nearest resource with something left in it |
+| `custom` | — | *(nothing — the player writes the chain)* |
+
+Four postures, deliberately, not six behaviours. A posture is a promise about
+when a squad will and will not leave the ground it was sent to, and a player who
+cannot predict that cannot plan with it. `press` is attack-move and pursues
+within the combat leash; `hold` is a move order, which `stepPursuit` refuses to
+divert; `observe` paces without committing; `work` puts the squad's workers on
+the ground. A fifth posture should be a decision, not a quiet elaboration.
+
+**The ground is resolved once and then held.** Re-deriving it every tick was the
+obvious alternative and it is wrong: the nearest enemy structure changes as
+structures fall, so the destination would move under an army already walking to
+it, and a plan whose destination moves is not a plan. `Mission.target` is
+therefore hashed state rather than a derived value — the one place this departs
+from D-028's derive-don't-bake rule, and for the opposite reason. D-028 bakes
+nothing because the researched list *is* the truth; here the moment of
+resolution is itself the truth, and re-deriving would lose it.
+
+**`escort` resolves to nothing, and that is recorded rather than papered over.**
+Escorting needs a subject to escort and `Mission` carries no such field. Every
+derivation considered — the nearest friendly squad, the corridor between the
+fallback and the objective, the other squads on the same mission — was a
+plausible-looking guess at what the player meant. A visibly unimplemented
+objective is better than one that quietly does the wrong thing. The fix is a
+subject id on `Mission` plus a command to set it, and it is a separate decision.
+
+### The fallback position and priority stop being decoration
+
+The whole of the player-facing doctrine is two commands that already existed:
+
+- **Placing a fallback arms the withdrawal.** A mission with a fallback breaks
+  off when it is spent; a mission without one fights where it stands. Where a
+  beaten squad should go is a decision the player makes by placing the marker,
+  and a simulation that chose one for them would be the interface giving advice
+  (`UI_BLUEPRINT.md` § "Information, never advice").
+- **Priority is the price in casualties.** `MISSION.withdrawBelowStrength` in
+  `data/tuning.ts`: low breaks off having lost 30%, normal at half strength,
+  high presses until three quarters of the force is gone. Priority also decides
+  which operation gets Command bandwidth when there is not enough for all. It
+  was previously a label the simulation never read.
+
+**Withdrawal is derived every tick, not latched.** The latch was the obvious
+implementation and it makes reinforcement meaningless — a broken mission would
+stay broken however many squads were fed into it. There is nothing to oscillate
+against: nothing in the game heals, so strength only falls except when squads
+are added, and adding squads raises the threshold by exactly as much as it
+raises the strength. `strengthPeak` is the only mission field that has to be
+remembered rather than derived, because dead members leave their squad's roster
+entirely and the survivors of a mauled force always read as full strength.
+
+**Strength is hit points, not a head count.** A force ground down to healthy
+survivors and a force still whole but badly hurt are not the same situation, and
+only one of them should keep pressing.
+
+### Command bandwidth covers missions too
+
+§8.3 gates how many squads may run a chain at once, and a derived chain is still
+a chain. Leaving missions outside the cap would make automation free the moment
+a player used the layer the blueprint calls primary — five squads driven by five
+missions on the Command that buys one chain. Hand-started chains hold their slot
+first (`cmdRunChain` already granted it), mission plans take what is left in
+priority order, ties break by the tick the operation was ordered and then by
+squad id. A squad the cap excludes simply holds; its assignment stands, so the
+panel shows an operation waiting on Command rather than one that evaporated.
+
+**Known asymmetry, deliberate.** The cap is enforced where plans are executed,
+in `stepSquads`, so it cannot be exceeded. But `cmdRunChain` in
+`sim/commands.ts` still counts only `running` squads, so it does not see mission
+load: starting a chain while every slot is spent on missions **succeeds**, and
+the mission plan it displaces stops without the player being told which. The fix
+is a one-line call-site change — count squads that are running *or* serving an
+active mission, excluding the one being started, and refuse as it already does
+for chains. `commands.ts` was outside this slice's ownership, and a gate applied
+in one direction only would have been worse than one that is visibly
+incomplete.
+
+### Consequences
+
+- `REPLAY_VERSION` → **8**. The same command stream now produces a different
+  match: squads move without chains, spent operations walk home, and chain steps
+  put their members into an order mode, so a `move` step and an `attackmove`
+  step no longer behave identically. They previously did — the editor's
+  "Attack-move" label described nothing, and the comment in `squads.ts`
+  promising it would engage "once combat lands at 1.9" had been stale since 1.10
+  shipped.
+- **New hashed state:** `Mission.target`, `Mission.strengthPeak`,
+  `Mission.createdTick` (it breaks bandwidth ties, so it decides outcomes) and
+  `Squad.servingMissionId` (it decides when a squad's step counters are stale).
+- **Fixed in passing:** chain step *coordinates* were not hashed, only step
+  kinds. Two peers holding chains that agreed on shape and disagreed on every
+  destination reported agreement.
+- **A hand-issued order releases the squad from its mission**, not merely from
+  its chain. Otherwise the mission re-issues its plan on the next tick and the
+  player's order is silently undone. Putting the squad back is one command
+  either way, exactly as restarting a stopped chain is.
+- **Nothing here names a unit, building or resource type** (D-029). An objective
+  resolves against whatever the world happens to contain, so a race shipping
+  different structures inherits the behaviour with no change to `sim/`.
+
+### Not decided here
+
+- **Completion and failure conditions.** `MissionStatus` still only ever moves
+  to `cancelled`. Judging an operation finished is a separate system, left out
+  for the same reason D-027 left it out.
+- **Naming a place explicitly.** The command stream cannot carry an objective
+  point — that needs a field on the `createMission` command in `sim/replay.ts` —
+  so today every plan comes from derivation. That is the purest form of the
+  premise and it is also a limit: a player cannot yet say *assault there*.
+  Adding it is additive, and it is what unblocks `escort`.
+- **Per-mission withdrawal thresholds.** Folded into priority so that no new
+  command was needed. A mission wanting its own number needs one.

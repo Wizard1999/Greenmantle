@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 5
-**State:** board rescaled 16×, tactical proof suite landed · committed locally, unpushed
+**Round:** 6
+**State:** missions reach the player · combat levers landed · pushed
 
 ## What finishing means
 
@@ -47,13 +47,17 @@ system is not occluded; it is unreachable.
 
 ### Missions drive squad behaviour
 - **Bar:** watch a replay and name what each squad was trying to do, without being told
-- **Status:** Queued
+- **Status:** In review
 
-`sim/missions.ts` is honest in its own header comment: a mission records
-objective, priority, fallback and assigned squads, and does not reach into squad
-behaviour. There is no mission interface at all. Until a squad under a mission
-visibly behaves differently from one that is not, this is an RTS with a chain
-editor attached, which is the one outcome the design brief rules out.
+Landed in round 6. A mission now resolves its objective to ground, becomes a
+plan `squads.ts` executes, and withdraws to its fallback when the operation is
+spent (D-041). `ui/missionPanel.ts` is the first surface it has ever had.
+
+Not yet passed, because the bar is a replay a stranger can read. What exists is
+the mechanism; what is unproven is whether an observer can name what a squad was
+trying to do without being told. The panel also has not been checked for overlap
+at 1366x768 or 1280x800 — the check the research panel skipped on its way to
+shipping unreachable.
 
 ### Tactical proof
 - **Bar:** `GAME_DESIGN.md` §2's own claims, as deterministic scenarios that must pass
@@ -128,6 +132,62 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 6
+
+Missions stopped being inert, and the two approved balance levers landed.
+
+**Missions drive squads (D-041).** `sim/missions.ts` had been real, hashed,
+replayed simulation state that changed nothing — D-027 deferred "what does
+assigning a squad to a mission actually do" until a UI existed to decide it.
+An objective now resolves to ground, becomes a plan `squads.ts` executes
+through the same machinery a hand-written chain uses, and a mission with a
+fallback withdraws when its force drops below what its priority tolerates. It
+supplies behaviour to a squad that has no chain of its own and never overwrites
+one that does. `REPLAY_VERSION` → 8.
+
+**And a player can reach it.** `grep -rn "mission" src/ui src/input` returned
+nothing before today; the blueprint's Level 2 — its stated *primary* gameplay
+layer — had no surface at all. `ui/missionPanel.ts` orders, assigns, prioritises,
+sets a fallback and cancels, all through `issueCommand` so real matches record.
+
+**B-011, the flank at contact.** Splitting the turn rate in two — the fast rate
+for turning toward travel, a third of it for re-facing a target — restored the
+payoff without touching responsiveness, because turning never gated movement.
+A 10v10 whose defender faces away was mutual annihilation on tick 456; it is now
+**10–0 on tick 432**. The old one-volley signature is gone: the rear/side lead
+ratio was 2.3333, exactly `(1.35-1)/(1.15-1)`, and is now 6.51. Marching around
+the back at ten a side changed no outcome at any separation; it now wins 8–0
+against a 0–0 control at separations 2, 3 and 4.
+
+**B-009, melee elevation.** Terrain amplitude ×1.35 — a scalar on an even
+function stays even, so B-007's symmetry is structurally intact and verified
+unchanged. The largest gap at a Legionnaire's 1.74 reach went **0.4783 → 0.6435**
+against a 0.600 threshold; board coverage 0 → 160 of 4053 squares. Three
+Legionnaires on the steepest melee site were a dead 0–0 mirror and now win 3–0
+with 103 HP standing, reflected exactly when the hill is swapped. `MAP_VERSION` → 6.
+
+**The builder corrected the brief, which is the most useful thing in this
+round.** I had treated the two levers as independent. They are the same
+constraint: the flanking arena contains 98.8% of the board's global melee-reach
+height gap, so there is no amplitude that gives a Legionnaire a hill anywhere
+and denies it one inside the tactical arena. It also found the old guard sampled
+four offsets on a coarse grid and reported 0.442 where the true figure was
+0.4724 — at the new amplitude it would have passed green at 0.5989 while the
+real value was 0.6377. That false pass is now impossible.
+
+Honest limits. The 10–0 sweep is a knife edge: a 5% peak lead flips a draw into
+a clean sweep whose survivors finish on 4.9 HP, so the result moved but the
+margin is thin. The far edge is untouched — a flank launched from beyond about
+five units is still worth zero, because a *walking* defender re-faces at the
+fast rate. And slower re-facing cuts both ways in an intermixed melee: an idle
+10v10 narrowed from 6 survivors to 2.
+
+Two agents hit a session limit mid-round: the mission panel's own integration
+check and the cross-cutting verification never ran. The panel is present,
+documented and tested, but nobody has yet confirmed it does not overlap another
+panel at 1366x768 or 1280x800, which is exactly how the research panel shipped
+unreachable. That check is the first thing to do next.
 
 ### round 5
 

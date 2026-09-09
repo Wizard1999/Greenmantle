@@ -13,11 +13,14 @@ import { mapBoundaryForSeed, mapLayoutForBoundary } from './mapBoundary';
  * on terrain that no longer matches what was recorded. Versioning turns that
  * from a silent wrong answer into an explicit rejection.
  *
+ * 6 — terrain amplitude raised so melee units can reach the high-ground
+ * threshold at contact range (B-009). Every seed produces different ground.
+ *
  * 4 — `terrainHeightAt` rebuilt from terms that are even under 180° rotation,
  * so height is symmetric between spawns (B-007). Every existing seed produces
  * different ground, which is exactly what this version guards.
  */
-export const MAP_VERSION = 5;
+export const MAP_VERSION = 6;
 
 /**
  * Phase 1 seeded map (assumption A5). Boundary-derived and rotationally symmetric: rotate 180° about

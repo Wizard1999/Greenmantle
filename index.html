@@ -194,6 +194,86 @@
   #map-seed-control input { flex: 1; min-width: 0; width: 100%; padding: 3px 6px; font-size: 11px; text-transform: none; letter-spacing: 0; }
   #map-seed-control button { padding: 3px 7px; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
 
+  /* ------------------------------------------- left column: the operations */
+  /* Level 2 of the blueprint's three command depths — the layer the player is
+     meant to spend the match in — so it heads the left-hand command column,
+     above the squads that carry the orders out. Blueprint puts it top-left and
+     this keeps it there.
+
+     Two properties are load-bearing rather than cosmetic:
+       · It inherits `.panel`'s pointer-events:auto and is deliberately absent
+         from the read-only opt-out list. A panel of controls that cannot be
+         clicked is exactly the defect D-032 exists to have removed once.
+       · Content-sized with a cap. With no operation ordered it is a header and
+         a row of objectives; it grows only as far as the player fills it, and
+         then scrolls rather than walking into #chain below. The 440px reserve
+         is this panel's top offset plus the tallest #chain measured — 335px
+         with a full six-step chain running — plus a gutter and slack, so the
+         two cannot meet at any supported viewport; the 140px floor keeps the
+         panel from collapsing to nothing on a viewport shorter than any we
+         support, which is the less bad of the two failures.
+       · Only the record scrolls. Ordering an operation is the control this
+         panel exists for, so it is pinned below the scroll box: measured at
+         1920x1080 with one operation open, every button past the fold read as
+         unreachable to `document.elementFromPoint` until it was. */
+  #missions {
+    left: var(--gutter); top: 58px; width: 250px;
+    max-height: clamp(140px, calc(100vh - 440px), 360px);
+    display: flex; flex-direction: column;
+    z-index: var(--z-console);
+  }
+  #missions h3, #missions-new, #missions-note { flex: none; }
+  #missions-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #missions h4 {
+    margin: 9px 0 5px; font: 600 10px/1.2 var(--serif);
+    letter-spacing: .1em; text-transform: uppercase; color: var(--gold);
+  }
+  .ops-empty { margin: 0; font-size: 11px; color: var(--ink-soft); }
+  .ops-list { display: grid; gap: 4px; margin-bottom: 8px; }
+  .op-row {
+    display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: baseline;
+    width: 100%; text-align: left; padding: 5px 8px; font-size: 12px;
+  }
+  .op-row.on { background: var(--gold-fill); border-color: var(--gold); }
+  .op-row .op-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .op-row .op-state, .op-row .op-count { font-size: 10px; color: var(--ink-soft); }
+  /* The blueprint's mission panel is a label/value table. Keep it one. */
+  .op-fields {
+    margin: 0 0 8px; display: grid; grid-template-columns: minmax(0, auto) 1fr;
+    gap: 4px 10px; font-size: 11.5px; align-items: center;
+  }
+  .op-fields dt { color: var(--ink-soft); white-space: nowrap; }
+  .op-fields dd { margin: 0; }
+  .op-fields dd.op-priority { display: flex; gap: 4px; }
+  .op-fields dd.op-priority button { font-size: 10px; padding: 2px 6px; border-radius: 6px; }
+  .op-fields dd.op-priority button.on { background: var(--gold-fill); border-color: var(--gold); font-weight: 700; }
+  .op-fields dd select { width: 100%; padding: 2px 5px; font-size: 11px; }
+  .op-cancel { width: 100%; margin-top: 7px; font-size: 11px; padding: 4px 8px; }
+  /* Squad cards: name, what it is doing, where it is standing. One line each,
+     because the point of a card is to be read at a glance rather than opened. */
+  .squad-cards { display: grid; gap: 4px; }
+  .squad-card { display: flex; gap: 4px; }
+  .squad-card.is-selected .squad-pick { background: var(--gold-fill); border-color: var(--gold); }
+  .squad-pick {
+    flex: 1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 5px; align-items: baseline; text-align: left; padding: 4px 6px; font-size: 10.5px;
+  }
+  .squad-pick .squad-name { font-weight: 600; white-space: nowrap; }
+  .squad-pick .squad-activity { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* The bearing is the column that gives way first: it is the one fact of the
+     three the tooltip repeats in full, so losing its tail costs least. */
+  .squad-pick .squad-where {
+    color: var(--ink-soft); font-size: 9.5px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .squad-act { width: 22px; padding: 0; font-size: 12px; line-height: 1; text-align: center; }
+  #missions-new {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--edge-soft);
+  }
+  #missions-new button { font-size: 11px; padding: 4px 7px; }
+  #missions-note { margin: 7px 0 0; font-size: 10.5px; line-height: 1.4; color: var(--ink-soft); }
+
   /* --------------------------------------- bottom left: squads and chains */
   #chain { left: var(--gutter); bottom: var(--gutter); width: 250px; text-align: left; }
   #chain .squads { display: flex; gap: 5px; margin-bottom: 8px; }
@@ -338,6 +418,7 @@
     #res { gap: 12px; padding: 5px 13px; }
     #res .big { font-size: 17px; }
     #chain { width: 226px; }
+    #missions { top: 52px; width: 226px; }
     #tutorial-panel { top: 52px; width: min(276px, calc(100vw - 20px)); }
   }
 
@@ -409,6 +490,14 @@
     <span class="big" id="c-time">08:00</span>
     <span class="sub" id="c-period">day</span>
   </div>
+</div>
+
+<!-- Left column: the operations you have ordered, and who is carrying them out. -->
+<div id="missions" class="panel">
+  <h3>Operations</h3>
+  <div id="missions-body"></div>
+  <div id="missions-new"></div>
+  <p id="missions-note" hidden></p>
 </div>
 
 <!-- Right column: what to learn, and where everything is. -->

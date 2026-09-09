@@ -35,12 +35,19 @@ import type { TechId } from '../data/tech';
 /**
  * Bump when the meaning of a command or of a sim rule changes.
  *
+ * 8 — missions drive the squads assigned to them (D-041). A squad on a mission
+ * now moves without any chain of its own, a mission with a fallback position
+ * withdraws its squads once the force is spent, and chain steps put their
+ * members into an order mode, so a `move` step and an `attackmove` step no
+ * longer behave identically. The same `assignSquadToMission` command therefore
+ * produces an entirely different match than it did at version 7.
+ *
  * 7 — combat resolves simultaneously instead of in array order (B-005), and
  * units now pursue acquired targets under a leash (B-006). Both change what the
  * same command stream produces, so every replay recorded before this would play
  * out differently and must be rejected rather than silently replayed wrong.
  */
-export const REPLAY_VERSION = 7;
+export const REPLAY_VERSION = 8;
 
 /**
  * Every player action, as plain serializable data.

@@ -2,6 +2,37 @@ export const TERRAIN_SIZE = 80;
 export const TERRAIN_FLOOR = -0.2;
 
 /**
+ * Vertical scale on the whole formula (B-009).
+ *
+ * At 1.0 no melee unit could ever receive an elevation modifier anywhere on any
+ * map. The largest height difference available at a Legionnaire's contact reach
+ * of 1.74 was 0.4783 against a `HIGH_GROUND_THRESHOLD` of 0.600 — 80% of the
+ * way and no further — so high ground was a Marksman-only mechanic while §8.7
+ * builds Cohort's core melee unit around holding a line.
+ *
+ * Three levers could have closed that: lower the threshold, lengthen melee
+ * reach, or raise the ground. Raising the ground is the one that keeps high
+ * ground *positional*. Lowering the threshold to 0.47 would fire the bonus on
+ * very nearly every slope on the board, and a bonus that is always on is not
+ * something a commander positions for; lengthening reach would change what
+ * melee *is* in order to fix where it can stand.
+ *
+ * 1.35 rather than the 1.26 that just clears the threshold, because 1.26 clears
+ * it at exactly one point. Melee high ground has to be findable to be worth
+ * marching to: at 1.26 no sampled site on the board offers it, at 1.30 about
+ * 1.3% do, and at 1.35 about 4.0% — roughly one tile in twenty-five, which is
+ * scarce enough to be terrain a player reads for and common enough to exist.
+ * The ceiling is 1.37: past that a melee pair separated along one axis inside
+ * the tactical arena can straddle the threshold, and the flanking suite stops
+ * being able to hold elevation still while it measures facing.
+ *
+ * A scalar cannot disturb the rotational symmetry below — scaling an even
+ * function leaves it even — which is what keeps B-007 fixed and is why the
+ * amplitude is one multiplier rather than four retuned coefficients.
+ */
+const RELIEF = 1.35;
+
+/**
  * Single source of truth for terrain height. The render mesh samples this same
  * function rather than duplicating the formula — the two drifting apart was a
  * real Phase 0 bug (06 §6).
@@ -29,18 +60,10 @@ export const TERRAIN_FLOOR = -0.2;
  * constraint, and `tests/terrainSymmetry.test.ts` will hold it to it.
  */
 export function terrainHeightAt(x: number, z: number): number {
-  const h = Math.cos(x * 0.15) * Math.cos(z * 0.15) * 1.15
+  const h = (Math.cos(x * 0.15) * Math.cos(z * 0.15) * 1.15
           + Math.sin(x * 0.11) * Math.sin(z * 0.11) * 0.95
           + Math.cos((x + z) * 0.09) * 0.45
-          + Math.cos((x - z) * 0.13) * 0.35;
-  // NOTE (B-009): at these amplitudes no melee unit can ever receive an
-  // elevation modifier. The largest height difference available anywhere on the
-  // board at a Legionnaire's contact reach of 1.74 is 0.4797, against
-  // HIGH_GROUND_THRESHOLD of 0.6 — so high ground is a Marksman-only mechanic
-  // while §8.7 builds Cohort's core melee unit around holding a line. Adding a
-  // short-wavelength term fixes it, and was tried; it is a balance lever with
-  // two equally valid alternatives (lower the threshold, or lengthen melee
-  // reach), so it is the designer's call rather than a defect to patch quietly.
+          + Math.cos((x - z) * 0.13) * 0.35) * RELIEF;
   return Math.max(h, TERRAIN_FLOOR);
 }
 

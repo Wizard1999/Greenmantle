@@ -20,47 +20,62 @@ import type { World } from '../../src/core/types';
  * facing or in the side they arrive on, and the thing measured is the result of
  * the fight rather than a damage number.
  *
- * **Re-measured against bounded turning.** Facing used to be rewritten
- * instantly and unboundedly by `stepMovement`, and every reading in this file
- * was taken against that. It is now `stepFacing` at `UNIT_TYPES[t].turnRate`,
- * and a unit that has stopped moving keeps turning toward what it is fighting.
- * Both halves of that change move numbers here, in opposite directions.
+ * **Re-measured against a split turn rate (B-011).** Facing was first rewritten
+ * instantly and unboundedly by `stepMovement`; then bounded by `stepFacing` at
+ * a single `turnRate`; it is now bounded at *two* rates — `turnRate` toward the
+ * direction of travel, `refaceRate` toward a target the unit is standing and
+ * fighting. Every reading in this file has been taken again against that.
  *
- * **What a flank is now worth.** A facing advantage is a *window*, not a state.
- * A Legionnaire reverses in 30 ticks — one second — and its attack cooldown is
- * 24, so a force that opens fire into an enemy's back lands exactly one boosted
- * volley before the arc closes. Measured at ten a side in contact: 21.94 HP of
- * health lead from the rear, 9.40 from the side, 0 from the front, and the
- * ratio between the two reproduces the ratio of the two bonuses to four figures
- * because each is one volley and nothing else.
+ * **Why one rate could not work.** A single rate has to be quick enough that
+ * movement does not read as sludge and slow enough that being caught the wrong
+ * way round costs something, and those are not the same number. At 0.110
+ * rad/tick a Legionnaire reversed in 30 ticks against its own 24-tick attack
+ * cooldown, so a defender taken completely from behind was square-on before the
+ * second blow landed and a flank was worth *exactly one volley*: 21.94 HP at
+ * ten a side, 1.8% of a 1,200 HP pool, and the 10v10 whose defender faced
+ * entirely away annihilated on tick 456 — the same tick, with the same
+ * survivors, as the head-on fight. The tell was that the rear-to-side lead
+ * ratio came out at 2.3333, which is (1.35-1)/(1.15-1) to four figures: one
+ * boosted volley each and nothing else.
  *
- * **What that costs the design claim.** 21.94 HP is 1.8% of a ten-model health
- * pool, and it no longer decides anything at contact: the 10v10 that used to go
- * 10–0 against a defender facing the wrong way is now mutual annihilation on
- * the same tick as the head-on fight, and so is every arc between them. Facing
- * at the moment of contact has gone from deciding the fight to costing one
- * volley. That shortfall is recorded in place, with the numbers, below.
+ * **What a flank is worth now.** `refaceRate` is 0.0367 — one third of the
+ * travel rate — so the rear arc holds for 29 ticks and the side arc for 28
+ * more. Against a 24-tick cooldown that is **two rear volleys and one side
+ * volley**, verified strike by strike below, and the difference is a change of
+ * result rather than a change of margin:
  *
- * **What it buys back, and this is the reason for the change.** Approach angle
- * against an unengaged, mobile enemy used to be worth *exactly* zero —
- * byte-identical outcomes marching head-on and marching all the way round the
- * back, at every separation. It is now worth something real: rear-arc contact
- * out to a separation of 4, side-arc contact out to 7, a lead that persists to
- * the end of the fight, and at three a side an outright reversal — mutual
- * annihilation head-on against a 1–0 win from behind, twenty-four ticks
- * quicker. At ten a side the same manoeuvre still fails to convert; both ends
- * of that are measured below.
+ * | defender facing | before | now |
+ * |---|---|---|
+ * | toward the attack | 0–0, tick 456 | 0–0, tick 456 |
+ * | side-on | 0–0, tick 456 | 0–0, tick 456 |
+ * | fully away | 0–0, tick 456 | **10–0, tick 432** |
  *
- * Hammer-and-anvil survives, but its old result leaned on facings freezing on
- * contact and the numbers have moved: it now pays inside a *band* of hammer
- * distances, roughly 4 to 6, and the near edge of that band is not a facing
- * effect at all — it is the shield wall, which a wing reinforcing from the
- * front stacks into and a wing arriving behind cannot.
+ * Two degrees of facing across the rear boundary now separates a dead heat from
+ * an 8–0 win, where before it separated 0 HP of lead from 9.40 HP of lead and
+ * nothing else.
+ *
+ * **And it converts at scale.** Marching ten models around the back of ten,
+ * against a mobile enemy nobody is holding, used to be worth *exactly* zero
+ * under instant facing and a permanent 21.94 HP lead with no change of result
+ * under one bounded rate. It now wins outright, 8–0, at every separation inside
+ * 5 — and past 5 it is still worth nothing, because the defenders finish coming
+ * about while the attackers are still walking. The far edge of the tactic is
+ * unchanged and is recorded below.
+ *
+ * Hammer-and-anvil is unmoved by any of this, and that is itself a result: an
+ * anvil holds the defending line's attention, so the line never turns away from
+ * it in the first place and there is no re-facing for a slower rate to slow
+ * down. It still pays inside a *band* of hammer distances, roughly 4 to 6, and
+ * the near edge of that band is not a facing effect at all — it is the shield
+ * wall, which a wing reinforcing from the front stacks into and a wing arriving
+ * behind cannot.
  *
  * Elevation is the obvious confound for all of this, since `highGroundBonus`
- * 1.25 is the same order as `flankBonus` 1.35. Every reading below carries a
- * count of attacks resolved across an elevation band, and every one of them is
- * zero; the first test explains why.
+ * 1.25 is the same order as `flankBonus` 1.35 — and terrain relief was raised
+ * by 1.35x in the same change (B-009), so it can no longer be waved away. Every
+ * reading below carries a count of attacks resolved across an elevation band,
+ * and every one of them is zero; the first test measures the ground and says
+ * exactly how much margin that answer has.
  */
 
 /** Facings, in the `atan2(dx, dz)` convention `approachFrom` and movement share. */
@@ -78,9 +93,18 @@ const FOOTPRINT = { minX: -14, maxX: 14, minZ: -10, maxZ: 10 };
  *  Legionnaire can strike another. */
 const REACH = UNIT_TYPES.legionnaire.combat.range + UNIT_TYPES.legionnaire.radius * 2;
 
-/** Radians of combat facing a Legionnaire buys per tick. Every window measured
- *  in this file is some arc divided by this. */
+/** Radians of facing a walking Legionnaire buys per tick. */
 const TURN = UNIT_TYPES.legionnaire.turnRate;
+
+/** ...and per tick spent standing and coming about toward a target. Every
+ *  window measured in this file is some arc divided by one of these two. */
+const REFACE = UNIT_TYPES.legionnaire.refaceRate;
+
+/** Ticks of rear arc a defender taken completely from behind has left, and then
+ *  ticks of side arc after that. Both are how far it still has to turn divided
+ *  by how fast it turns, plus the tick it spends acquiring before it starts. */
+const REAR_WINDOW = Math.floor(COMBAT.rearArc / REFACE) + 1;
+const SIDE_WINDOW = Math.floor((Math.PI - COMBAT.rearArc - COMBAT.frontArc) / REFACE);
 
 interface Reading {
   outcome: Outcome;
@@ -143,34 +167,135 @@ const attackers = (count: number, x: number, facing: number): Placement[] =>
 
 // --- The ground these fights are measured on ------------------------------
 
-describe('the arena is one elevation band', () => {
-  it('never lets a melee pair straddle the high-ground threshold', () => {
-    // Every margin in this file is meant to be a facing effect. `highGroundBonus`
-    // is 1.25 against `flankBonus` 1.35, so a slope inside the footprint would
-    // be indistinguishable from the thing under test — and B-007 is the
-    // reminder that terrain asymmetry hid inside a "mirrored" fight once
-    // already. This checks the stronger property: not that the ground is
-    // symmetric, but that no two points close enough to fight are in different
-    // bands at all, so `elevationMultiplier` is 1 for every pair, always.
-    let worst = 0;
-    const offsets = [[REACH, 0], [0, REACH], [REACH * 0.71, REACH * 0.71], [REACH * 0.71, -REACH * 0.71]];
-    for (let x = FOOTPRINT.minX; x <= FOOTPRINT.maxX; x += 0.5) {
-      for (let z = FOOTPRINT.minZ; z <= FOOTPRINT.maxZ; z += 0.5) {
-        for (const offset of offsets) {
-          const dx = offset[0] ?? 0;
-          const dz = offset[1] ?? 0;
-          worst = Math.max(worst, Math.abs(terrainHeightAt(x, z) - terrainHeightAt(x + dx, z + dz)));
-        }
+/** Worst height gap between a point in the footprint and a point one melee
+ *  reach away from it, over the given set of directions. */
+function worstGap(directions: readonly number[]): { gap: number; x: number; z: number } {
+  let worst = { gap: 0, x: 0, z: 0 };
+  for (let x = FOOTPRINT.minX; x <= FOOTPRINT.maxX + 1e-9; x += 0.1) {
+    for (let z = FOOTPRINT.minZ; z <= FOOTPRINT.maxZ + 1e-9; z += 0.1) {
+      const here = terrainHeightAt(x, z);
+      for (const angle of directions) {
+        const gap = Math.abs(here - terrainHeightAt(
+          x + Math.cos(angle) * REACH, z + Math.sin(angle) * REACH));
+        if (gap > worst.gap) worst = { gap, x, z };
       }
     }
-    expect(worst).toBeLessThan(HIGH_GROUND_THRESHOLD); // measured 0.442 against 0.6
+  }
+  return worst;
+}
+
+describe('the arena is one elevation band', () => {
+  it('keeps every pair separated along the axis these lines fight on level', () => {
+    // Every margin in this file is meant to be a facing effect, and
+    // `highGroundBonus` 1.25 is the same order as `flankBonus` 1.35, so a slope
+    // inside the footprint would be indistinguishable from the thing under
+    // test. B-007 is the reminder that terrain asymmetry hid inside a
+    // "mirrored" fight once already.
+    //
+    // This used to assert the strongest possible form — that no two points
+    // within melee reach anywhere in the footprint are in different bands, in
+    // any direction — and that is no longer true. Raising relief by 1.35x to
+    // give melee access to high ground at all (B-009) necessarily raised it
+    // here too, because the footprint contains very nearly the steepest ground
+    // on the board at this scale: 0.4724 of the global 0.4783 before the
+    // change. There is no amplitude that gives a Legionnaire a hill somewhere
+    // and denies it one here.
+    //
+    // So the property asserted is the one the scenarios actually use. These are
+    // ranked lines that meet along x, so the gaps that can land between an
+    // attacker and its target are the gaps along x.
+    const alongX = worstGap([0]);
+    expect(alongX.gap).toBeLessThan(HIGH_GROUND_THRESHOLD);
+    expect(alongX.gap).toBeCloseTo(0.5898, 3);   // 98.3% of the threshold — thin
+  });
+
+  it('says where the ground can cross the threshold, and how far that is from any fight', () => {
+    // The honest remainder. Sweeping every direction rather than only x finds
+    // 0.6377 — over the 0.600 threshold — at (-10.2, 0.2), on a diagonal.
+    // Nothing in this file ever fights there: the deepest any placement reaches
+    // is x = -9, and at that separation the two sides are 9 apart, five times
+    // melee reach, so no pair is ever *in contact* on that ground. That is an
+    // argument, not a proof, which is why every reading below carries `uphill`
+    // and every scenario asserts it is zero. Those assertions are the real
+    // guard; this test exists so the margin is written down rather than assumed.
+    const directions = Array.from({ length: 24 }, (_, i) => (i / 24) * Math.PI * 2);
+    const omni = worstGap(directions);
+    expect(omni.gap).toBeCloseTo(0.6377, 3);
+    expect(omni.x).toBeCloseTo(-10.2, 6);
+    expect(Math.hypot(omni.x, omni.z)).toBeGreaterThan(REACH * 5);
+  });
+
+  it('resolves not one attack across an elevation band, across every scenario shape', () => {
+    // The aggregate of what the individual readings assert one at a time: run
+    // the four shapes this file uses — contact, approach, hammer, split — and
+    // require that no attacker in any of them was ever in a different elevation
+    // band from its target.
+    const twelve = defenders(12, 0, WEST);
+    const shapes = [
+      [...attackers(10, -CONTACT / 2, EAST), ...defenders(10, CONTACT / 2, EAST)],
+      [...attackers(10, 4, WEST), ...defenders(10, 0, WEST)],
+      [...attackers(6, -CONTACT, EAST), ...attackers(6, 6, WEST), ...twelve],
+      [...attackers(6, -8, EAST), ...attackers(6, 8, WEST), ...twelve],
+    ];
+    for (const shape of shapes) expect(fight(shape).uphill).toBe(0);
   });
 });
 
 // --- How long a facing advantage lasts ------------------------------------
 
 describe('a defender comes about at a bounded rate', () => {
-  it('takes a full second to reverse, and finishes before the attacker is in reach', () => {
+  it('costs a standing defender three and a half attack cycles to reverse', () => {
+    // The mechanic B-011 changed, isolated: two models already in contact, the
+    // defender facing entirely the wrong way, neither of them moving. This is
+    // the case `refaceRate` governs — `turnRate` never runs here — and it is
+    // where the whole shortfall lived, because at the travel rate the defender
+    // was square-on before the attacker's second blow landed.
+    const world = arena([
+      ...attackers(1, -CONTACT / 2, EAST),
+      ...defenders(1, CONTACT / 2, EAST),
+    ]);
+    const defender = unitsOf(world, 'rival')[0];
+    const attacker = unitsOf(world, 'player')[0];
+    if (!defender || !attacker) throw new Error('the pair did not spawn');
+
+    const struck: Array<[number, Approach]> = [];
+    let lastRear = -1;
+    let lastSide = -1;
+    let reversed = -1;
+    for (let tick = 1; tick <= 120 && world.units.length === 2; tick++) {
+      const arc = approachFrom(attacker, defender);
+      fightOut(world, 1);
+      // `stepCombat` resets the cooldown to its full value on exactly the tick
+      // a unit strikes, and nothing else writes it, so this is unambiguous.
+      if (attacker.attackCd === UNIT_TYPES.legionnaire.combat.attackTicks) {
+        struck.push([tick, arc]);
+      }
+      const seen = approachFrom(attacker, defender);
+      if (seen === 'rear') lastRear = tick;
+      if (seen === 'side') lastSide = tick;
+      if (reversed < 0 && defender.facing === WEST) reversed = tick;
+    }
+
+    // Neither unit moves, so both windows are pure arc over `refaceRate`. They
+    // are asserted against the derivation as well as against the measurement,
+    // so retuning the rate has to be acknowledged in both places.
+    expect(lastRear).toBe(REAR_WINDOW);
+    expect(lastRear).toBe(29);
+    expect(lastSide).toBe(REAR_WINDOW + SIDE_WINDOW);
+    expect(lastSide).toBe(57);
+    expect(reversed).toBe(87);   // 2.9s, against 30 ticks at the travel rate
+
+    // The point of all of it: the attacker's cooldown is 24, so the rear window
+    // now contains two of its blows and the side window a third. Under one
+    // shared turn rate it contained exactly one, and that is what made a flank
+    // worth 1.8% of a health pool.
+    expect(struck.slice(0, 4)).toEqual([
+      [1, 'rear'], [25, 'rear'], [49, 'side'], [73, 'front'],
+    ]);
+    expect(struck.filter(([, arc]) => arc === 'rear')).toHaveLength(2);
+  });
+
+  it('takes a full second to reverse while walking, and finishes before the attacker is in reach', () => {
     // One attacker walking at one defender that is looking the other way, from
     // the far edge of acquire range. This is the mechanic every scenario below
     // is built on, isolated: how many ticks of rear arc a march can buy, and
@@ -205,28 +330,34 @@ describe('a defender comes about at a bounded rate', () => {
       if (contact < 0 && gap <= REACH) contact = tick;
     }
 
-    // A full about-face is now a measurable, bounded cost rather than free.
+    // The defender pursues, so this is the *travel* rate for as long as it is
+    // walking — which is deliberate and is the half of B-011 that did not
+    // change. An order is obeyed on the tick it lands, and a unit closing on an
+    // enemy is by definition looking where it is going.
     expect(defender.facing).toBe(EAST);
-    expect(reversed).toBe(30); // ceil(pi / 0.110) = 29 ticks of turning, begun on tick 2
-
-    // The arcs the attacker passes through on the way in: the rear holds for
-    // ten ticks and the side for ten more, which is what a 1.05 rad arc costs
-    // at 0.110 rad/tick. Asserted both ways round so a change to either the
-    // arcs or the rate has to be acknowledged here.
     expect(firstSide).toBe(Math.ceil(COMBAT.rearArc / TURN) + 1);
     expect(firstFront).toBe(Math.ceil((Math.PI - COMBAT.frontArc) / TURN) + 1);
     expect(firstSide).toBe(11);
     expect(firstFront).toBe(21);
 
-    // FALLS SHORT OF THE DESIGN CLAIM, recorded as measured. Twenty ticks of
-    // exposed arc sounds like a lot and is worth nothing here, because all of
-    // it is spent out of reach: the defender is square-on at tick 21 with 3.40
-    // still between them — 1.95 melee reaches — and contact is not until tick
-    // 27, six ticks later. A lone unit marching round the back of a lone mobile
-    // enemy from acquire range lands no rear attack at all. The window is real
-    // but it opens too early, and only a force that begins its approach inside
-    // about four units gets any of it into weapon range (measured below). The
-    // mechanic at fault is that a defender turns faster than an attacker closes.
+    // Squaring up completely takes 35 ticks rather than the 30 the travel rate
+    // alone would give, because the last stretch is spent in contact and
+    // standing still, where `refaceRate` governs. The split shows up here as a
+    // five-tick tail and nowhere else in this scenario.
+    expect(reversed).toBe(35);
+
+    // FALLS SHORT OF THE DESIGN CLAIM, recorded as measured, and unchanged by
+    // B-011. Twenty ticks of exposed arc sounds like a lot and is worth nothing
+    // here, because all of it is spent out of reach: the defender is square-on
+    // at tick 21 with 3.40 still between them — 1.95 melee reaches — and
+    // contact is not until tick 27, six ticks later. A lone unit marching round
+    // the back of a lone mobile enemy from acquire range lands no rear attack
+    // at all. The window is real but it opens too early, and only a force that
+    // begins its approach inside about five units gets any of it into weapon
+    // range (measured below). The mechanic at fault is that a defender *walking
+    // toward* an attacker turns faster than the attacker closes, and slowing
+    // the re-facing rate cannot touch it — the defender here is not re-facing,
+    // it is travelling.
     expect(gapAtFront).toBeCloseTo(3.4, 1);
     expect(gapAtFront).toBeGreaterThan(REACH * 1.9);
     expect(contact).toBe(27);
@@ -247,7 +378,7 @@ function facingFight(rivalFacing: number): Reading {
 }
 
 describe('flanking at the moment of contact', () => {
-  it('prices a facing advantage at one volley rather than at the fight', () => {
+  it('turns a dead heat into a clean sweep when the defender is facing away', () => {
     const head = facingFight(WEST);
     const back = facingFight(EAST);
 
@@ -259,56 +390,68 @@ describe('flanking at the moment of contact', () => {
     expect(head.arc.rear).toBe(0);
     expect(head.peakLead).toBe(0);
 
-    // The defender starts with its back turned and buys ten unit-ticks of rear
-    // arc per model, then ten of side, then it is square-on. Ten ticks is less
-    // than one 24-tick attack cycle, so every attacker lands exactly one
-    // boosted blow and the arc has shut before the next one comes round.
-    expect(back.arc.rear).toBe(100);
-    expect(back.arc.side).toBe(100);
+    // The defender starts with its back turned and buys 29 unit-ticks of rear
+    // arc per model, then 28 of side, then it is square-on. 29 ticks spans two
+    // 24-tick attack cycles, so each attacker lands two boosted blows before
+    // the rear arc shuts and a third at the side multiplier after it.
+    expect(back.arc.rear).toBe(10 * REAR_WINDOW);
+    expect(back.arc.side).toBe(10 * SIDE_WINDOW);
+    expect(back.arc.rear).toBe(290);
+    expect(back.arc.side).toBe(280);
     expect(back.uphill).toBe(0);
-    expect(back.peakLead).toBeCloseTo(21.943, 2);
 
-    // FALLS SHORT OF THE DESIGN CLAIM, recorded as measured, and it is a
-    // regression rather than a shortfall inherited from before: against instant
-    // facing this same pair of runs was a dead heat against 10–0 in 336 ticks.
-    // The boosted volley is now worth 21.94 HP — 1.8% of the defender's
-    // 1200-HP pool — and the fight ends the same way on the same tick whichever
-    // way the defender was looking. §2 wants flanking "extremely important to
-    // fight outcomes"; at contact it is worth one attack in nineteen. The
-    // mechanic at fault is the ratio between `turnRate` and `attackTicks`, and
-    // setting it is the lead's call, not this suite's.
-    expect(back.outcome.survivors).toEqual({ player: 0, rival: 0 });
-    expect(back.outcome.ticks).toBe(head.outcome.ticks);
-    expect(back.outcome.ticks).toBe(456);
-    expect(back.lead).toBe(0);
+    // THE CLAIM, MET. Identical models, identical ground, identical positions;
+    // the defending line is looking the wrong way and is wiped out without
+    // losing the attackers a single model, twenty-four ticks — one attack
+    // cycle — sooner than the head-on fight takes to annihilate both sides.
+    //
+    // Before B-011 this same pair of runs was 0–0 on tick 456 *both ways*: a
+    // 30-tick about-face against a 24-tick cooldown gave the attacker exactly
+    // one boosted volley, worth 21.94 HP against a 1,200 HP pool. The margin is
+    // still not large in absolute terms — the survivors finish on 4.9 HP each —
+    // but §2 asks flanking to be important to fight *outcomes*, and the outcome
+    // is now the thing that moves.
+    expect(back.outcome.winner).toBe('player');
+    expect(back.outcome.survivors).toEqual({ player: 10, rival: 0 });
+    expect(back.outcome.hp.player).toBeCloseTo(49.152, 3);
+    expect(back.peakLead).toBeCloseTo(61.198, 2);
+    expect(head.outcome.ticks - back.outcome.ticks)
+      .toBe(UNIT_TYPES.legionnaire.combat.attackTicks);
+    expect(back.outcome.ticks).toBe(432);
+    expect(head.outcome.ticks).toBe(456);
   });
 
-  it('separates front, side and rear in exact proportion to their multipliers', () => {
+  it('separates front, side and rear by how many volleys each arc contains', () => {
     const head = facingFight(WEST);
     const flank = facingFight(NORTH);
     const back = facingFight(EAST);
 
-    // The three are still cleanly distinguishable in the arcs the attackers
-    // stand in, and the side window is half the rear one because it is half the
-    // angle the defender has left to turn through.
-    expect(flank.arc.side).toBe(50);
+    // Side-on, the defender is already half way round, so its remaining turn is
+    // the side arc alone and the window is roughly half the rear one.
+    expect(flank.arc.side).toBe(150);
     expect(flank.arc.rear).toBe(0);
-    expect(back.arc.rear).toBe(100);
+    expect(back.arc.rear).toBe(290);
     expect(head.arc.side + head.arc.rear).toBe(0);
 
-    // Survivor count cannot tell them apart any more — all three annihilate on
-    // tick 456 — so the separation has to be read in the health lead the opening
-    // volley buys. That it comes out *exactly* proportional to the excess
-    // multipliers is the signature of the one-volley mechanism: same models,
-    // same targets, one attack each, differing only by 0.35 against 0.15.
+    // What the three are worth, read as the peak health lead rather than the
+    // final one, because two of the three still annihilate. The old suite could
+    // assert that rear/side came out at exactly (1.35-1)/(1.15-1) — that exact
+    // proportionality *was* the defect, the signature of one volley each and
+    // nothing else. It no longer holds, because the arcs no longer contain the
+    // same number of blows: two rear plus one side against one side.
     expect(head.peakLead).toBe(0);
     expect(flank.peakLead).toBeCloseTo(9.404, 2);
-    expect(back.peakLead).toBeCloseTo(21.943, 2);
+    expect(back.peakLead).toBeCloseTo(61.198, 2);
     expect(back.peakLead / flank.peakLead)
-      .toBeCloseTo((COMBAT.flankBonus - 1) / (COMBAT.sideBonus - 1), 3);
+      .toBeGreaterThan((COMBAT.flankBonus - 1) / (COMBAT.sideBonus - 1) * 2);
+
+    // Only the rear approach converts. A side window of 15 ticks holds one
+    // volley, which is worth 9.40 HP and changes nothing — so the fight the
+    // flank wins is genuinely the flank, not merely "any arc but the front".
     expect(head.outcome.ticks).toBe(456);
     expect(flank.outcome.ticks).toBe(456);
-    expect(back.outcome.ticks).toBe(456);
+    expect(flank.outcome.survivors).toEqual({ player: 0, rival: 0 });
+    expect(back.outcome.survivors).toEqual({ player: 10, rival: 0 });
   });
 
   it('treats the frontal arc as a hard edge, not a gradient', () => {
@@ -322,32 +465,37 @@ describe('flanking at the moment of contact', () => {
     const stillSide = at(Math.PI - COMBAT.rearArc - eps);
     const justRear = at(Math.PI - COMBAT.rearArc + eps);
 
-    // Two degrees of facing still buys or forfeits a whole volley: nothing on
-    // one side of the line, a full side bonus on the other, off a single tick of
+    // Two degrees of facing buys or forfeits a whole volley: nothing on one
+    // side of the line, a full side bonus on the other, off a single tick of
     // contact before the defender rotates into the front arc anyway. The edge
-    // being a step and not a ramp is what would make the arc worth drawing on
+    // being a step and not a ramp is what makes the arc worth drawing on
     // screen — a soft falloff would be unreadable and unactionable.
     expect(justInside.arc.side).toBe(0);
     expect(justInside.peakLead).toBe(0);
     expect(justOutside.arc.side).toBe(10);
     expect(justOutside.peakLead).toBeCloseTo(9.404, 2);
 
-    // ...and the same again at the rear boundary, where one tick of rear arc is
-    // worth 2.33x what one tick of side arc is worth.
-    expect(stillSide.peakLead).toBeCloseTo(9.404, 2);
+    // ...and again at the rear boundary. One tick of rear arc plus the side
+    // window behind it is 31.35 HP against the 18.81 that two side volleys buy.
+    expect(stillSide.arc.side).toBe(280);
+    expect(stillSide.peakLead).toBeCloseTo(18.808, 2);
     expect(justRear.arc.rear).toBe(10);
-    expect(justRear.peakLead).toBeCloseTo(21.943, 2);
+    expect(justRear.peakLead).toBeCloseTo(31.347, 2);
 
-    // FALLS SHORT OF THE DESIGN CLAIM, recorded as measured. The edge is sharp
-    // in *price* and invisible in *result*: all four runs are 0–0 on tick 456.
-    // Under instant facing the same two degrees separated losing every model
-    // from losing none. A step worth 9.40 HP is not a step a player will ever
-    // notice, so the arc is currently legible to this test and to nobody else.
-    for (const reading of [justInside, justOutside, stillSide, justRear]) {
+    // THE CLAIM, MET, and this is the sharpest form of it available. The edge
+    // used to be sharp in *price* and invisible in *result* — all four runs
+    // annihilated on tick 456, and a step worth 9.40 HP is not a step a player
+    // would ever notice. Two degrees of facing across the rear boundary now
+    // separates a dead heat from an 8–0 win a full attack cycle sooner.
+    for (const reading of [justInside, justOutside, stillSide]) {
       expect(reading.outcome.survivors).toEqual({ player: 0, rival: 0 });
       expect(reading.outcome.ticks).toBe(456);
       expect(reading.uphill).toBe(0);
     }
+    expect(justRear.outcome.survivors).toEqual({ player: 8, rival: 0 });
+    expect(justRear.outcome.ticks).toBe(432);
+    expect(justRear.outcome.hp.player).toBeCloseTo(23.154, 3);
+    expect(justRear.uphill).toBe(0);
   });
 });
 
@@ -378,24 +526,49 @@ describe('approach angle against an unengaged, mobile enemy', () => {
       bought.push(Number(behind.peakLead.toFixed(3)));
     }
 
-    // Both sides close, so the defender spends the march turning as it walks and
-    // has burned most of its 30-tick about-face by the time anyone is in reach.
-    // Rear contact survives only inside 5, side contact only inside 8, and past
-    // that the long way round is once again worth literally nothing.
-    expect(rear).toEqual([90, 50, 10, 0, 0, 0, 0, 0]);
-    expect(side).toEqual([100, 100, 100, 80, 40, 10, 0, 0]);
-    expect(bought).toEqual([21.943, 21.943, 21.943, 9.404, 9.404, 9.404, 0, 0]);
+    // Both sides close, so the defender spends the march turning as it walks —
+    // at the *travel* rate, which B-011 deliberately left fast — and has burned
+    // most of its about-face by the time anyone is in reach. What the slower
+    // re-facing rate adds is the ticks after contact, when both sides have
+    // stopped: the rear window nearly triples, from 90 unit-ticks to 260 at a
+    // separation of 2. Rear contact still survives only inside 5 and side
+    // contact only inside 8, and past that the long way round is once again
+    // worth literally nothing.
+    expect(rear).toEqual([260, 140, 20, 0, 0, 0, 0, 0]);
+    expect(side).toEqual([280, 290, 290, 220, 100, 10, 0, 0]);
+    expect(bought).toEqual([62.092, 31.347, 31.347, 9.404, 9.404, 9.404, 0, 0]);
   });
 
-  it('still cannot convert that window at ten a side', () => {
-    // FALLS SHORT OF THE DESIGN CLAIM, recorded as measured. The window is real
-    // and the lead it buys is permanent — still 21.94 HP at tick 400 — but
-    // 21.94 out of 1200 never crosses a 120-HP kill threshold, so the two runs
-    // end as the same object: same tick, same survivors, same health, at every
-    // separation. Marching round the back of ten models is worth a 1.8% health
-    // lead and no change of result. The mechanic at fault is the same
-    // one-volley cap as at contact.
-    for (const d of [2, 4, 6, 8]) {
+  it('converts that window at ten a side, inside the distance the window survives', () => {
+    // THE CLAIM, MET, and this is the scenario a player would actually call
+    // flanking: ten models against ten, nobody pinning anyone, the only
+    // difference between the two runs being which side of the enemy line the
+    // attack arrives on.
+    //
+    // Under instant facing this was worth *exactly* zero — byte-identical
+    // outcomes. Under a single bounded turn rate it was worth a permanent 21.94
+    // HP lead that never crossed a 120-HP kill threshold, so the two runs still
+    // ended as the same object. It now wins the fight outright with eight of ten
+    // models standing, a full attack cycle sooner.
+    for (const d of [2, 3, 4]) {
+      const head = fight([...attackers(10, -d, EAST), ...defenders(10, 0, WEST)]);
+      const behind = fight([...attackers(10, d, WEST), ...defenders(10, 0, WEST)]);
+      expect(head.outcome.survivors).toEqual({ player: 0, rival: 0 });
+      expect(behind.outcome.winner).toBe('player');
+      expect(behind.outcome.survivors).toEqual({ player: 8, rival: 0 });
+      expect(head.outcome.ticks - behind.outcome.ticks).toBe(24);
+      expect(behind.uphill).toBe(0);
+    }
+
+    // THE HONEST LIMIT, unchanged by B-011 and worth keeping in view. Past a
+    // separation of 4 the two runs are once again the same object at every
+    // distance out to acquire range, because a defender that is *walking* turns
+    // at the travel rate and has squared up long before contact. A flank must
+    // still be launched from inside about five units — which is to say from a
+    // distance at which the enemy can already see it coming. The mechanic at
+    // fault is not the price of a flank any more, it is how long the approach
+    // takes relative to how fast a mobile enemy comes about.
+    for (const d of [5, 6, 8]) {
       const head = fight([...attackers(10, -d, EAST), ...defenders(10, 0, WEST)]);
       const behind = fight([...attackers(10, d, WEST), ...defenders(10, 0, WEST)]);
       expect(behind.outcome).toEqual(head.outcome);
@@ -403,12 +576,11 @@ describe('approach angle against an unengaged, mobile enemy', () => {
     }
   });
 
-  it('reverses the result at the scale where one volley is worth a model', () => {
-    // Three a side is the scale at which a single boosted volley crosses a kill
-    // threshold instead of being absorbed, and it is the proof that approach
-    // angle is no longer free of consequence: the *same* three models marching
-    // the *same* distance annihilate each other coming from the front and win
-    // outright coming from behind.
+  it('reverses the result at three a side too, and by more than one model', () => {
+    // Three a side was the scale at which a single boosted volley used to cross
+    // a kill threshold instead of being absorbed — the only scale at which the
+    // old build could show a reversal at all. It still reverses, and now by two
+    // models rather than one at close range.
     for (const d of [2, 3, 4]) {
       const head = fight([...attackers(3, -d, EAST), ...defenders(3, 0, WEST)]);
       const behind = fight([...attackers(3, d, WEST), ...defenders(3, 0, WEST)]);
@@ -416,14 +588,20 @@ describe('approach angle against an unengaged, mobile enemy', () => {
       expect(head.outcome.survivors).toEqual({ player: 0, rival: 0 });
       expect(head.outcome.winner).toBeNull();
       expect(behind.outcome.winner).toBe('player');
-      expect(behind.outcome.survivors).toEqual({ player: 1, rival: 0 });
-      expect(behind.outcome.hp.player).toBeCloseTo(1.902, 2);
       expect(behind.uphill).toBe(0);
-
-      // ...and 24 ticks sooner, which is exactly one attack cycle: the fight
-      // ends a whole exchange early because it started one blow ahead.
-      expect(head.outcome.ticks - behind.outcome.ticks).toBe(24);
     }
+
+    // At 2 the rear window holds two volleys and the tactic is worth two models
+    // and two whole attack cycles; at 3 and 4 it holds one and is worth one.
+    const near = fight([...attackers(3, 2, WEST), ...defenders(3, 0, WEST)]);
+    expect(near.outcome.survivors).toEqual({ player: 2, rival: 0 });
+    expect(near.outcome.hp.player).toBeCloseTo(21.057, 3);
+    expect(fight([...attackers(3, -2, EAST), ...defenders(3, 0, WEST)]).outcome.ticks
+      - near.outcome.ticks).toBe(48);
+
+    const far = fight([...attackers(3, 4, WEST), ...defenders(3, 0, WEST)]);
+    expect(far.outcome.survivors).toEqual({ player: 1, rival: 0 });
+    expect(far.outcome.hp.player).toBeCloseTo(1.902, 2);
 
     // The far edge of it, and the honest limit of the tactic. At 5 the defenders
     // have finished coming about before contact, the rear window is empty and
@@ -431,7 +609,6 @@ describe('approach angle against an unengaged, mobile enemy', () => {
     const head5 = fight([...attackers(3, -5, EAST), ...defenders(3, 0, WEST)]);
     const behind5 = fight([...attackers(3, 5, WEST), ...defenders(3, 0, WEST)]);
     expect(behind5.arc.rear).toBe(0);
-    expect(behind5.arc.side).toBe(24);
     expect(behind5.peakLead).toBeCloseTo(2.94, 2);
     expect(behind5.outcome).toEqual(head5.outcome);
   });

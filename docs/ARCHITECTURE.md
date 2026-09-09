@@ -65,8 +65,8 @@ Imports `core/` and `data/` **only**.
 | `construction.ts` | Build sites and progress. |
 | `production.ts` | Training queues; applies rally points on spawn. |
 | `supply.ts` | Command supply — population cap, control range, automation bandwidth in one stat (§8.1). |
-| `squads.ts` | Persistent squads and behaviour chains. |
-| `missions.ts` | Missions above squads (D-007/D-027). **Currently inert** — records intent, does not yet drive squad behaviour. |
+| `squads.ts` | Persistent squads and behaviour chains, and the executor for mission plans. Allocates Command bandwidth between the two (D-041). |
+| `missions.ts` | Missions above squads (D-007/D-027). Resolves an objective to ground, turns it into a plan `squads.ts` executes, and decides when a spent operation withdraws to its fallback (D-041). |
 | `tech.ts` | Research engine. Modifiers **derived** from the researched list, never baked into units (D-028). |
 | `terrain.ts` | Single source of truth for terrain height; the render mesh samples this rather than duplicating the formula. |
 | `mapBoundary.ts` | Generated polygon play area; orders and movement are clamped to it. |
@@ -125,6 +125,7 @@ lerp using the loop's `alpha`. That is why a 30 Hz sim looks smooth at 144 fps.
 | `chainEditor.ts` | Behaviour-chain editor. |
 | `minimap.ts` | Tactical map with visibility state. |
 | `researchPanel.ts` | Research interface over the tech engine (D-028) — available upgrades, prerequisites, cost gating. |
+| `missionPanel.ts` | Mission panel and squad cards — the blueprint's Level 2, and the only surface `sim/missions.ts` (D-027) has. Orders, assigns, prioritises, sets a fallback and cancels, all through `issueCommand`. The model (`missionPanelModel`, `squadCard`, `placeOf`) is plain data so `tests/missionPanel.test.ts` can assert what the panel says without a DOM. |
 | `fogOfWar.ts` | Presentation-side visibility field (unexplored/explored/visible). |
 | `visibility.ts` | Single controller governing what the player may see, click and target. |
 | `tutorial.ts` | Optional seven-step guided tutorial; observes state, never injects sim changes. |
@@ -214,6 +215,12 @@ ai → tech → production → construction → squads → gather → build
 The reaper runs before missions so a mission can never hold a squad id that was
 pruned this tick; victory runs last so it sees the settled state.
 
+`stepSquads` runs early because it issues orders and `stepMovement` has to act
+on them the same tick. `stepMissions` runs late because it *reads* the outcome —
+it records the strength each operation finished the tick with, which
+`stepSquads` compares against at the start of the next. One tick of lag,
+identical on every peer.
+
 ## Snapshot / restore / hash
 
 | Feature | Implementation |
@@ -233,3 +240,11 @@ within tolerance are not reported as desynced.
 `npm run verify` = typecheck + lint + tests + build. Every system has a suite;
 `tests/architecture.test.ts` enforces rule 1 and `tests/determinism.test.ts`
 enforces rule 2.
+
+Two suites are split by *what they guard* rather than by module, because the
+distinction has already been got wrong once:
+
+| Suite | Guards |
+|---|---|
+| `tests/missions.test.ts` | The mission primitive — creation, assignment, lifecycle, hashing, replay of the commands themselves. |
+| `tests/missionOrders.test.ts` | What a mission makes its squads *do* (D-041) — objective resolution, withdrawal doctrine, Command bandwidth, and a replay of a match where a mission did all the driving. |

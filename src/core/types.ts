@@ -184,6 +184,16 @@ export interface Squad {
   patrolFrom: Vec2 | null;
   patrolTo: Vec2 | null;
   patrolHeading: 'to' | 'from';
+  /**
+   * The mission whose plan this squad carried out last tick, or null when it
+   * was following its own chain or nothing at all.
+   *
+   * Stored rather than derived, for the same reason `dispatched` is: it records
+   * what the squad *was* doing. When the plan changes hands the step counters
+   * above describe a chain that no longer applies, and nothing in the current
+   * tick says so.
+   */
+  servingMissionId: EntityId | null;
 }
 
 /**
@@ -192,11 +202,11 @@ export interface Squad {
  * priority and assigned squads all affect what the game considers "assigned"
  * and must be identical across replay/lockstep peers.
  *
- * This lands the data model and commands only — no auto-behaviour yet.
- * Missions do not currently drive their squads' behaviour chains; a squad
- * still needs its own chain or orders. Wiring "assigned to this mission"
- * into automatic behaviour is deliberately left for the mission-panel UI
- * work that depends on this landing first.
+ * A mission drives its squads (D-041). It supplies behaviour to a squad that
+ * is not running a chain of its own, never overwrites one that is, and governs
+ * withdrawal in both cases. `sim/missions.ts` turns the objective into a plan;
+ * `sim/squads.ts` executes it through the same machinery a hand-written chain
+ * uses.
  */
 export type MissionObjective =
   | 'assault' | 'defend' | 'scout' | 'escort' | 'expand' | 'harvest' | 'custom';
@@ -213,8 +223,35 @@ export interface Mission {
   status: MissionStatus;
   /** Squads carrying out this mission. Ids, not references (D-010). */
   squadIds: EntityId[];
-  /** Where assigned squads should retreat to if the mission is called off. */
+  /**
+   * Where assigned squads fall back to once the operation is spent.
+   *
+   * Setting it is what arms the withdrawal doctrine: a mission with a fallback
+   * breaks off when its force drops below the strength its priority tolerates,
+   * a mission without one fights where it stands. That is the whole of the
+   * player-facing doctrine, expressed in one placed marker (D-041).
+   */
   fallback: Vec2 | null;
+  /**
+   * The ground the operation is aimed at, worked out from the objective on the
+   * first tick the mission has a squad on it.
+   *
+   * Resolved once, then left alone. Re-deriving it every tick would let the
+   * destination move under the army — the nearest enemy structure changes as
+   * structures fall — and a plan whose destination moves is not a plan. Stays
+   * null for objectives the world cannot answer on its own, and such a mission
+   * drives nothing until it is given one.
+   */
+  target: Vec2 | null;
+  /**
+   * Greatest total hit points the assigned squads have held at once.
+   *
+   * The one piece of mission state that cannot be recovered from the current
+   * tick: dead members leave their squad's roster entirely, so the survivors of
+   * a mauled force always read as full strength. Withdrawal is measured against
+   * this, so it has to be remembered.
+   */
+  strengthPeak: number;
   createdTick: number;
 }
 

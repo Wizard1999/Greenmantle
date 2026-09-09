@@ -66,6 +66,30 @@ export const AUTOMATION = {
   maxSquads: 5,       // squads are bound to number keys 1–5
 };
 
+/**
+ * Missions (D-041). What a mission does to the squads carrying it out.
+ *
+ * The withdrawal table is the only balance number the mission system has, and
+ * it is indexed by priority deliberately. Priority was previously a label the
+ * simulation never read; making it the price the player is willing to pay in
+ * casualties turns it into a real decision, expressible with the two commands
+ * that already exist — set a priority, place a fallback.
+ *
+ * Fractions of the force's own high-water strength, so they mean the same thing
+ * to a two-unit picket and a twenty-unit push:
+ *
+ *   low     — break off having lost 30%. A probe, not a commitment.
+ *   normal  — break off at half strength, roughly where a fight is already lost.
+ *   high    — press until three quarters of the force is gone.
+ *
+ * A mission with no fallback position never withdraws whatever its priority,
+ * because there is nowhere to withdraw *to* and inventing one would be the
+ * interface giving advice (`UI_BLUEPRINT.md` § "Information, never advice").
+ */
+export const MISSION = {
+  withdrawBelowStrength: { low: 0.7, normal: 0.5, high: 0.25 },
+};
+
 // Combat (§2, §8.6, §8.7). Positioning decides fights, so every number here is
 // about *where* units are, not how fast the player clicks.
 export const COMBAT = {

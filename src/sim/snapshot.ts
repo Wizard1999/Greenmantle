@@ -147,9 +147,19 @@ export function hash(world: World): string {
     mix(t.researching?.ticksLeft ?? -1);
   }
 
+  // A mission decides what its squads do (D-041), so every field it decides
+  // from is a divergence source. `target` is the ground the operation is aimed
+  // at and `strengthPeak` is what withdrawal is measured against — two peers
+  // disagreeing about either would send the same army to different places.
+  // `createdTick` breaks ties for Command bandwidth, so it decides which of two
+  // equal-priority operations actually runs.
   for (const m of world.missions) {
     mix(m.id); mixS(m.team); mixS(m.objective); mixS(m.priority); mixS(m.status);
     mixF(m.fallback?.x ?? 0); mixF(m.fallback?.z ?? 0);
+    mix(m.target ? 1 : 0);
+    mixF(m.target?.x ?? 0); mixF(m.target?.z ?? 0);
+    mixF(m.strengthPeak);
+    mix(m.createdTick);
     for (const id of m.squadIds) mix(id);
   }
 
@@ -159,8 +169,14 @@ export function hash(world: World): string {
     mixS(sq.patrolHeading);
     mixF(sq.patrolFrom?.x ?? 0); mixF(sq.patrolFrom?.z ?? 0);
     mixF(sq.patrolTo?.x ?? 0); mixF(sq.patrolTo?.z ?? 0);
+    // Which mission's plan the squad was executing decides when its step
+    // counters are reset, so it is a rule input rather than a readout.
+    mix(sq.servingMissionId ?? -1);
     for (const m of sq.memberIds) mix(m);
-    for (const st of sq.chain) mixS(st.kind);
+    // Where a step points, not merely what kind it is. Only the kind was hashed
+    // before, so two peers holding chains that agreed on shape and disagreed on
+    // every destination reported agreement.
+    for (const st of sq.chain) { mixS(st.kind); mixF(st.x); mixF(st.z); }
   }
 
   return (h >>> 0).toString(16).padStart(8, '0');

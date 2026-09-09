@@ -11,8 +11,9 @@ import { Recorder, checkReplay, playback } from '../src/sim/replay';
 import { must, run } from './helpers';
 import type { World } from '../src/core/types';
 
-/** Missions sit above squads (D-007). These tests guard the sim primitive
- *  only — no UI, no automatic squad behaviour, that is future work. */
+/** Missions sit above squads (D-007). These tests guard the primitive —
+ *  creation, assignment, lifecycle, replay. What a mission makes its squads
+ *  actually *do* (D-041) is `missionOrders.test.ts`. */
 
 const fresh = (seed = 1337) => buildTestMap(createWorld(seed));
 
@@ -33,6 +34,12 @@ describe('creating missions', () => {
     expect(mission?.priority).toBe('normal');
     expect(mission?.squadIds).toEqual([]);
     expect(mission?.team).toBe('player');
+    // Unresolved until the mission has a squad to resolve it from, and no
+    // strength recorded until one is on it. A mission with neither drives
+    // nothing, which is what makes ordering one free.
+    expect(mission?.target).toBeNull();
+    expect(mission?.strengthPeak).toBe(0);
+    expect(mission?.fallback).toBeNull();
   });
 
   it('accepts an initial squad list, filtered to the team', () => {

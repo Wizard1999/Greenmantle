@@ -64,25 +64,42 @@ export function stepMovement(u: Unit, boundary: MapBoundary): void {
  * movement. The second was load-bearing by accident — hammer-and-anvil worked
  * only because a pinned unit's facing froze. Now both are rules.
  *
- * Deliberately no effect on movement itself. The brief is to feel more
- * responsive than StarCraft, where heavy units visibly pivot before they will
- * move; here an order is obeyed on the tick it lands and only the combat facing
- * lags. Turning is automatic, so it adds nothing a player can micro.
+ * **The two cases run at different rates, and that split is the whole point
+ * (B-011).** Under a single rate the two things a facing has to be good for
+ * pull in opposite directions. Travel wants a fast rate: a unit that visibly
+ * lags the direction it is walking reads as sludge, and the brief is to be more
+ * responsive than StarCraft rather than equally so. Re-facing under fire wants a
+ * slow one, because that rate *is* the price of being caught the wrong way
+ * round — and at the travel rate the price was one volley. A Legionnaire came
+ * about in 30 ticks against an `attackTicks` of 24, so a defender taken
+ * completely in the back was square-on before the second blow landed, and a
+ * 10v10 whose defender faced entirely away resolved identically to the head-on
+ * fight. Two rates cost one extra number per unit and let each case have the
+ * value it needs.
+ *
+ * Deliberately no effect on movement itself, in either case. An order is obeyed
+ * on the tick it lands and only the combat facing lags. Turning is automatic, so
+ * it adds nothing a player can micro — what decides a flank is where the squad
+ * was sent, which is doctrine.
  */
 export function stepFacing(world: World): void {
   for (const u of world.units) {
-    const goal = facingGoal(world, u);
-    if (goal === null) continue;
-    u.facing = turnToward(u.facing, goal, UNIT_TYPES[u.type].turnRate);
+    const def = UNIT_TYPES[u.type];
+    // Travelling: look where you are going, quickly.
+    if (u.x !== u.prevX || u.z !== u.prevZ) {
+      u.facing = turnToward(u.facing, Math.atan2(u.x - u.prevX, u.z - u.prevZ), def.turnRate);
+      continue;
+    }
+    // Standing and fighting: come about toward the target, slowly.
+    const bearing = targetBearing(world, u);
+    if (bearing === null) continue;
+    u.facing = turnToward(u.facing, bearing, def.refaceRate);
   }
 }
 
-/** Where a unit wants to be looking: along its travel if moving, otherwise at
- *  whatever it is currently fighting. Null when it has neither. */
-function facingGoal(world: World, u: Unit): number | null {
-  if (u.x !== u.prevX || u.z !== u.prevZ) {
-    return Math.atan2(u.x - u.prevX, u.z - u.prevZ);
-  }
+/** Direction from a unit to whatever it is currently fighting, or null when it
+ *  has no target, the target is already gone, or the two are coincident. */
+function targetBearing(world: World, u: Unit): number | null {
   if (u.targetId === null) return null;
   const target = world.units.find(t => t.id === u.targetId);
   if (!target) return null;

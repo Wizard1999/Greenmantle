@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { HIGH_GROUND_THRESHOLD, terrainHeightAt } from '../src/sim/terrain';
 import { mapBoundaryForSeed, mapLayoutForBoundary } from '../src/sim/mapBoundary';
 import { COMBAT } from '../src/data/tuning';
+import { UNIT_TYPES } from '../src/data/units';
 
 /**
  * Spawn fairness, in elevation (B-007).
@@ -73,6 +74,35 @@ describe('terrain is symmetric between spawns', () => {
       highest = Math.max(highest, h);
     }
     expect(highest - lowest).toBeGreaterThan(HIGH_GROUND_THRESHOLD * 2);
+    expect(highest - lowest).toBeCloseTo(3.635, 2);   // measured, after B-009
+  });
+
+  it('carries enough relief for a melee unit to hold a hill (B-009)', () => {
+    // The floor under the amplitude, kept next to the symmetry assertions
+    // because the two constrain the same formula from opposite sides and a
+    // later art pass will be reading both. B-009: at the original amplitude the
+    // largest height gap available anywhere at a Legionnaire's 1.74 contact
+    // reach was 0.4783 against a 0.600 threshold, so §8.7's core melee unit
+    // could never receive or suffer an elevation modifier on any map. Relief is
+    // now scaled 1.35x and the gap is 0.6435.
+    //
+    // Asserted as the local *gradient* rather than by re-running the exhaustive
+    // sweep in `tactics/highGround.test.ts`, which is where the tactical
+    // consequences are measured. This is the cheap guard that fails first if
+    // someone flattens the terrain again.
+    const reach = UNIT_TYPES.legionnaire.combat.range + UNIT_TYPES.legionnaire.radius * 2;
+    let steepest = 0;
+    for (let x = -40; x <= 40; x += 0.5) {
+      for (let z = -40; z <= 40; z += 0.5) {
+        const here = terrainHeightAt(x, z);
+        for (let k = 0; k < 16; k++) {
+          const angle = (k / 16) * Math.PI * 2;
+          steepest = Math.max(steepest, here - terrainHeightAt(
+            x + Math.cos(angle) * reach, z + Math.sin(angle) * reach));
+        }
+      }
+    }
+    expect(steepest).toBeGreaterThanOrEqual(HIGH_GROUND_THRESHOLD);
   });
 
   it('has high ground reachable within an engagement, not only across the map', () => {

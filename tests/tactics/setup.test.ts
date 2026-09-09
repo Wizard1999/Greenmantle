@@ -24,13 +24,15 @@ import type { Team, UnitTypeKey, World } from '../../src/core/types';
  * bonus stationary, penalty moving — rewards setup over kiting".
  *
  * **Settle is no longer the only thing these scenarios measure.** Now that
- * `turnRate` bounds how fast a unit comes about, facing is a second and
- * independent axis of preparation: reversing costs a Marksman 26 ticks of
- * turning and a Legionnaire 29, so a force caught pointing the wrong way cannot
- * correct it inside the engagement that punishes it. That turns out to decide
- * both scenarios where preparation used to look worthless — the drifting
- * defence below, which used to be shot in the back by its own drift, and the
- * Legionnaire, which had no way to earn a positional advantage at all.
+ * turning is bounded, facing is a second and independent axis of preparation.
+ * A unit that is walking comes about at `turnRate` — 26 ticks to reverse for a
+ * Marksman, 29 for a Legionnaire — and one that is standing and fighting comes
+ * about at `refaceRate`, which is a third of that: 75 ticks and 86 (B-011). So
+ * a force caught pointing the wrong way at the moment of contact cannot correct
+ * it inside the engagement that punishes it. That decides both scenarios where
+ * preparation used to look worthless — the drifting defence below, which used
+ * to be shot in the back by its own drift, and the Legionnaire, which had no
+ * way to earn a positional advantage at all.
  *
  * **Three confounds had to be removed before any of this measures setup.** A
  * first attempt used long single-rank lines and lost with a *settled* defence
@@ -41,7 +43,7 @@ import type { Team, UnitTypeKey, World } from '../../src/core/types';
  *
  * | confound | how it is held still | verified by |
  * |---|---|---|
- * | elevation | both blocks sit near the terrain crest, height spread 0.169 against a 0.6 threshold | `neutral ground` below |
+ * | elevation | both blocks sit near the terrain crest, height spread 0.227 against a 0.6 threshold | `neutral ground` below |
  * | facing | *ranged only.* Both sides spawn looking at each other and no Marksman ever turns more than 0.375 rad off that, so no flank bonus is collected | `neutral ground`, and the swing readings in `not told to hold` |
  * | crowding | every force is <= `COHESION.cap`, so no side is docked for packing | counts capped at 20 |
  * | shape | attackers march to individual slots, arriving in the same block the control uses | `block()` |
@@ -400,15 +402,25 @@ describe('preparation beats modest numerical superiority (§2)', () => {
     expect(held.survivors.rival).toBe(10);          // not one attacker lost
 
     // What did change is the thing it is being compared against. Left idle, the
-    // same ten now *win* 6-0 where they used to lose 0-4, because manoeuvre
-    // finally buys something a scrum cannot take straight back: free to pursue,
-    // they land 20 rear-arc and 8 side-arc blows on a block that arrived under
-    // move orders and stopped. So the hold order does not merely fail to help a
-    // melee line, it inverts a 6-0 win into a 0-10 loss — a 16-model swing on
-    // the same twenty models and the same ground.
+    // same ten *win* where they used to lose 0-4, because manoeuvre finally
+    // buys something a scrum cannot take straight back: free to pursue, they
+    // land rear-arc and side-arc blows on a block that arrived under move
+    // orders and stopped. So the hold order does not merely fail to help a
+    // melee line, it inverts a win into a 0-10 loss on the same twenty models
+    // and the same ground.
+    //
+    // The size of that win narrowed from 6 survivors to 2 when `refaceRate`
+    // split off from `turnRate` (B-011), and the reason is worth recording
+    // because it is the one place the change cuts against the side using it. In
+    // an intermixed melee *both* blocks end up behind each other, so slowing
+    // re-facing multiplies both sides' flank blows rather than one's: the
+    // player's rose from 28 of 211 to 54 of 195 and the rival's from 21 to 51.
+    // A slower turn makes a scrum bloodier for everyone in it, and the side that
+    // was already ahead keeps a thinner margin.
     const idle = fightOut(setupVsArrival(10, 10, false, 'legionnaire', MELEE_CONTACT));
     expect(idle.winner).toBe('player');
-    expect(idle.survivors.player).toBe(6);
+    expect(idle.survivors.player).toBe(2);
+    expect(idle.hp.player).toBeCloseTo(77.745, 3);
 
     // And it buys manoeuvre, not invulnerability: eleven attackers put the same
     // idle defence back to nothing.
@@ -418,23 +430,28 @@ describe('preparation beats modest numerical superiority (§2)', () => {
 
     // The arcs are the attribution, and they are the reason this reads as a §2
     // result rather than a fluke: a held line never lands a blow outside the
-    // enemy's front arc, an idle one lands 28 of its 211 outside it. §2's
+    // enemy's front arc, an idle one lands 54 of its 195 outside it. §2's
     // positioning pillar therefore does reach melee — through the flank arc,
-    // and not through anything the word "setup" describes.
+    // and not through anything the word "setup" describes. The held counts are
+    // byte-identical to the pre-`turnRate` sim and to the pre-`refaceRate` one,
+    // which is the cleanest evidence available that no facing rule rescues a
+    // unit that cannot close.
     const heldBlows = measureFight(setupVsArrival(10, 10, true, 'legionnaire', MELEE_CONTACT)).blows;
     const idleBlows = measureFight(setupVsArrival(10, 10, false, 'legionnaire', MELEE_CONTACT)).blows;
     expect(heldBlows.player).toEqual({ front: 109, side: 0, rear: 0 });
     expect(heldBlows.rival).toEqual({ front: 208, side: 0, rear: 0 });
-    expect(idleBlows.player).toEqual({ front: 183, side: 8, rear: 20 });
-    expect(idleBlows.rival).toEqual({ front: 159, side: 2, rear: 19 });
+    expect(idleBlows.player).toEqual({ front: 141, side: 22, rear: 32 });
+    expect(idleBlows.rival).toEqual({ front: 133, side: 24, rear: 27 });
 
-    // Worth recording because it bounds how much of the above is flanking: with
+    // Worth recording because it bounds how much of the above is flanking. With
     // facing rewritten instantly, 208 of that fight's 297 blows landed in
-    // somebody's back and the winner was whoever spun fastest. Bounded turning
-    // cuts that to 39 of 391 — the flank is now earned by walking round a line
-    // that cannot come about, which is the mechanic §2 asks for.
+    // somebody's back and the winner was whoever spun fastest. One bounded rate
+    // cut that to 39 of 391; splitting the rate raises it again to 105 of 379,
+    // which is the intended direction — the flank is earned by walking round a
+    // line that cannot come about, and a line that cannot come about is now
+    // genuinely slow to.
     const idleTotal = Object.values(idleBlows.player).concat(Object.values(idleBlows.rival));
-    expect(idleTotal.reduce((a, b) => a + b, 0)).toBe(391);
+    expect(idleTotal.reduce((a, b) => a + b, 0)).toBe(379);
   });
 });
 
