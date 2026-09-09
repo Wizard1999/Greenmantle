@@ -55,6 +55,7 @@
     --z-flash:    45;   /* transient messages, over the console */
     --z-guide:    60;   /* first-run guide */
     --z-sheet:    70;   /* the controls reference, a modal */
+    --z-outcome:  75;   /* the match result, over anything a player opened */
     --z-dev:      80;   /* developer scaffolding, above everything */
   }
 
@@ -215,15 +216,48 @@
        · Only the record scrolls. Ordering an operation is the control this
          panel exists for, so it is pinned below the scroll box: measured at
          1920x1080 with one operation open, every button past the fold read as
-         unreachable to `document.elementFromPoint` until it was. */
+         unreachable to `document.elementFromPoint` until it was.
+       · The cap is 640px, not 360px. At 360 the panel stopped growing while
+         there was still 280px of empty screen above #chain: measured with three
+         operations open and two squads formed, 6 of the panel's 19 controls sat
+         below its own fold at 1920x1080 — the priority buttons, the fallback
+         selector and Cancel operation among them. 640 is what `100vh - 440`
+         allows at 1080p, so the cap now binds only where the reserve does not.
+       · The scrollbar is always drawn, in the panel's own edge colour, and its
+         gutter is reserved so the contents do not shift when it appears. A
+         scroll box with an overlay scrollbar that fades looks identical to a
+         panel with nothing more in it, which is how nine reachable controls
+         read as missing at 1366x768. */
   #missions {
     left: var(--gutter); top: 58px; width: 250px;
-    max-height: clamp(140px, calc(100vh - 440px), 360px);
+    max-height: clamp(140px, calc(100vh - 440px), 640px);
     display: flex; flex-direction: column;
     z-index: var(--z-console);
   }
   #missions h3, #missions-new, #missions-note { flex: none; }
-  #missions-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  #missions-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+  /* Neither `scrollbar-width` nor `scrollbar-color` is set. Either one makes
+     Chromium ignore the ::-webkit-scrollbar rules below and fall back to an
+     overlay scrollbar that fades when idle — which is how a box showing 131px
+     of 337px came to look like a panel with nothing more in it. Measured at
+     1366x768. Firefox has neither pseudo-element nor overlay default here and
+     draws its own visible bar, which is the same outcome. */
+  #missions-body::-webkit-scrollbar { width: 7px; }
+  #missions-body::-webkit-scrollbar-track { background: transparent; }
+  #missions-body::-webkit-scrollbar-thumb {
+    background: var(--ink-soft); border-radius: 999px;
+  }
+  /* A second, independent signal, because a scrollbar is a thin line a player
+     scanning a battlefield does not look at. The class is set by
+     `missionPanel.ts` whenever there is content below the fold; the shadow is
+     inset, so it sits on the container's own edge rather than scrolling with
+     what it is marking. */
+  #missions-body.has-more {
+    box-shadow: inset 0 -13px 11px -11px rgba(46, 32, 62, .5);
+  }
   #missions h4 {
     margin: 9px 0 5px; font: 600 10px/1.2 var(--serif);
     letter-spacing: .1em; text-transform: uppercase; color: var(--gold);
@@ -325,6 +359,12 @@
   }
   #card button b { display: block; }
   #card button .c { display: block; color: var(--ink-soft); font-size: 10px; }
+  /* A refused command replaces its own cost line with the reason it is refused,
+     in the alert brown the supply cap already uses. The button stays legible
+     rather than fading out, because "not enough Legacy" is the whole point of
+     the button being there. */
+  #card button .c.why { color: var(--alert); font-weight: 600; }
+  #card button:disabled { opacity: .72; }
   #card .hint { margin-top: 4px; font-size: 11px; color: var(--ink-soft);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #card .empty { align-self: center; font-size: 12px; color: var(--ink-soft); }
@@ -343,9 +383,18 @@
 
   /* ---------------------------------------------------------- first run */
   /* A new player is served by being walked through the first six minutes, not
-     by a wall of keys. The guide opens itself once, then never again. */
+     by a wall of keys. The guide opens itself once, then never again.
+
+     It stands beside the operations column, not on top of it. It used to share
+     the exact origin of #missions — both `left: var(--gutter); top: 58px` —
+     which the guide won on z-index, covering 33,000 px² of the panel and every
+     one of its seven objective buttons: `elementFromPoint` at the Assault
+     button returned `tutorial-body`. Measured at 1920x1080 with the guide open.
+     A first-run player was therefore taught the game with the one panel the
+     project exists for hidden behind the lesson. */
   #tutorial-panel {
-    left: var(--gutter); top: 58px; width: min(300px, calc(100vw - 28px));
+    left: calc(var(--gutter) + 250px + 10px); top: 58px;
+    width: min(300px, calc(100vw - 28px));
     display: none; z-index: var(--z-guide); padding: 14px 16px;
   }
   #tutorial-panel.visible { display: block; }
@@ -404,6 +453,38 @@
   #quality-control { display: flex; gap: 7px; align-items: center; font-size: 12px; }
   #quality-control span { color: var(--ink-soft); }
 
+  /* ------------------------------------------------------- the outcome */
+  /* The end of the match used to be a 1.6-second flash sharing a channel with
+     "orders stopped". It is now the one surface that centres itself: same warm
+     vellum, same two type families, but the largest heading in the build,
+     because a result the player can miss is not a result. Built by
+     `src/ui/victory.ts`; hidden until there is a winner. */
+  #outcome {
+    left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(420px, calc(100vw - 40px));
+    display: none; padding: 22px 26px 18px; text-align: left;
+    z-index: var(--z-outcome);
+  }
+  #outcome.visible { display: block; }
+  #outcome h2 {
+    margin: 0; font: 600 34px/1.1 var(--serif);
+    letter-spacing: .02em; color: var(--gold);
+  }
+  #outcome[data-result="defeat"] h2 { color: var(--alert); }
+  #outcome-cause {
+    margin: 7px 0 15px; padding-bottom: 14px; font-size: 13px; line-height: 1.5;
+    color: #4c4235; border-bottom: 1px solid var(--edge-soft);
+  }
+  #outcome-facts {
+    margin: 0; display: grid; grid-template-columns: minmax(0, auto) 1fr;
+    gap: 5px 14px; font-size: 12px; align-items: baseline;
+  }
+  #outcome-facts dt { color: var(--ink-soft); white-space: nowrap; }
+  #outcome-facts dd { margin: 0; font-variant-numeric: tabular-nums; }
+  #outcome-dismiss {
+    width: 100%; margin-top: 17px; padding: 7px 10px; font-size: 12px;
+  }
+
   /* ---------------------------------------------------- smaller viewports */
   /* Panels are fixed-size objects, so on a 1280x800 laptop they eat a bigger
      share of the screen than on a 1080p display for no design reason. Tighten
@@ -419,7 +500,12 @@
     #res .big { font-size: 17px; }
     #chain { width: 226px; }
     #missions { top: 52px; width: 226px; }
-    #tutorial-panel { top: 52px; width: min(276px, calc(100vw - 20px)); }
+    /* The offset follows #missions' width at this size, so the guide keeps
+       standing beside the operations column rather than over it. */
+    #tutorial-panel {
+      top: 52px; left: calc(var(--gutter) + 226px + 10px);
+      width: min(276px, calc(100vw - 20px));
+    }
   }
 
   /* ===================================================================
@@ -476,12 +562,15 @@
   <button id="controls-toggle" type="button" title="Controls and settings (?)">Keys</button>
 </div>
 
-<!-- The state of the war, read-only. -->
+<!-- The state of the war, read-only.
+     The gatherable is named "Legacy" here and nowhere else calls it anything
+     different (D-033). This bar said "essence" while the tutorial and the
+     research panel said "Legacy", so a player saw two words for one number. -->
 <div id="res" class="panel">
-  <div><span class="big" id="r-essence">0</span> <span class="sub">essence</span></div>
+  <div><span class="big" id="r-legacy">0</span> <span class="sub">Legacy</span></div>
   <div><span id="r-gathering">0</span>/<span id="r-workers">0</span> <span class="sub">gathering</span></div>
   <div class="rule"></div>
-  <div><span class="big" id="r-supply">0/0</span> <span class="sub">command</span></div>
+  <div><span class="big" id="r-supply">0/0</span> <span class="sub">Command</span></div>
   <div><span class="big" id="r-chains">0/0</span> <span class="sub">chains</span></div>
   <div class="rule"></div>
   <div><span id="r-remaining">0</span> <span class="sub">left on map</span></div>

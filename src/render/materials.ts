@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createPainterlyMaterial } from './painterly';
-import { PALETTE } from './palette';
+import { MARK, PALETTE, TEAM_IDENTITY } from './palette';
 import type { HuePath } from './palette';
 import type { Team } from '../core/types';
 
@@ -86,4 +86,51 @@ export function leafMaterial(): THREE.ShaderMaterial {
  *  guard against per-instance material creation creeping back in. */
 export function sharedMaterialCount(): number {
   return cache.size;
+}
+
+/**
+ * Flat marks — rings, markers, decorators.
+ *
+ * These are `MeshBasicMaterial`, so they do not cost a shader compile the way
+ * the painterly set does, and the D-006 argument above does not apply verbatim.
+ * They were still being allocated per entity: `makeUnitView` built four of them
+ * for every unit, so a hundred-unit battle carried four hundred material objects
+ * whose only distinguishing property was a colour shared by all of them. Cached
+ * by role and team, the same battle carries eight.
+ *
+ * Kept in a separate cache from the painterly one so `sharedMaterialCount()`
+ * keeps meaning "shader programs", which is the number the performance guard
+ * actually cares about.
+ */
+const flatCache = new Map<string, THREE.MeshBasicMaterial>();
+
+function flat(key: string, color: THREE.Color, opacity: number): THREE.MeshBasicMaterial {
+  const hit = flatCache.get(key);
+  if (hit) return hit;
+  const mat = new THREE.MeshBasicMaterial({
+    color, side: THREE.DoubleSide, transparent: true, opacity, depthWrite: false,
+  });
+  flatCache.set(key, mat);
+  return mat;
+}
+
+/** The selection ring, on units and on buildings alike. One mark, one colour. */
+export function selectionMarkMaterial(): THREE.MeshBasicMaterial {
+  return flat('mark:selection', MARK.selection, 0.92);
+}
+
+/** Team identity at strategic and world zoom, where the silhouette is gone. */
+export function teamMarkMaterial(team: Team): THREE.MeshBasicMaterial {
+  return flat(`mark:team:${team}`, TEAM_IDENTITY[team].mid, 0.92);
+}
+
+/** Territory held. Same identity hue as everything else the team owns. */
+export function territoryMarkMaterial(team: Team): THREE.MeshBasicMaterial {
+  return flat(`mark:territory:${team}`, TEAM_IDENTITY[team].lit, 0.4);
+}
+
+/** How many flat mark materials exist. Guards the per-entity allocation
+ *  regression this cache was added to remove. */
+export function sharedFlatMaterialCount(): number {
+  return flatCache.size;
 }

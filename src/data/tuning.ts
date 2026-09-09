@@ -136,9 +136,24 @@ export const COMBAT = {
    * One number, in one place, so the leash is cheap to retune.
    */
   pursuitLeash: 12.0,
-  /** Damage a unit does to a building, as a fraction of its normal damage.
-   *  Nothing in the Phase 1 roster is a siege unit, so everything chips. */
-  buildingDamageScale: 0.5,
+  /**
+   * Damage a unit does to a building, as a fraction of its normal damage.
+   * Nothing in the Phase 1 roster is a siege unit, so everything chips.
+   *
+   * Was 0.5, which is not chipping. Measured: twenty Legionnaires took a 2,200
+   * HP Standard down in about twenty-six seconds, so losing one field battle
+   * ended the match inside a minute and the whole back half of every match was
+   * an unopposed demolition. At 0.12 the same twenty units need about a minute
+   * and three quarters — long enough that the defender's production, its
+   * garrison and its remaining Outposts are all still part of the answer, which
+   * is the difference between "quick and decisive battles" (§2) and a quick and
+   * decisive *match* (§3 asks for 10–15 minutes).
+   *
+   * This is the number that says a line unit is not a siege engine. When a real
+   * siege unit lands it should carry a per-unit multiplier rather than this
+   * being raised back up for everybody.
+   */
+  buildingDamageScale: 0.12,
 };
 
 /**
@@ -178,13 +193,53 @@ export const VICTORY = {
 
 export const ECON = {
   gatherTicks: 45,      // 1.5s to fill up — Cohort is "flat and reliable" (§8.1)
-  carryAmount: 8,       // essence per trip
+  /**
+   * Essence per trip. Was 8.
+   *
+   * The gather numbers were set when the board was 39 units across and a
+   * worker's round trip was a few paces. On the board D-038 built, with the AI
+   * now putting Outposts on the patches it works, a worker's cycle is roughly
+   * 130 ticks and eleven of them earn about fifteen essence a second — enough
+   * to strip all eight patches inside five minutes, which made map exhaustion
+   * the *normal* end of a match rather than §3's long case, and produced armies
+   * faster than anything on the board could fight them.
+   */
+  carryAmount: 5,
   depositTicks: 6,      // 0.2s to unload
   gatherRange: 1.4,     // how close a worker must be to a node
   gatherStandoff: 1.05, // where a worker parks — each gets its own slot
   slotEpsilon: 0.12,    // how close to its slot counts as arrived
   dropoffRange: 2.6,    // how close a worker must be to a base
-  nodeCapacity: 1200,   // finite: matches can run until the map is exhausted (§3)
+  /**
+   * Essence in one patch. Was 1200, giving 9,600 on an eight-patch map.
+   *
+   * §3 puts exhaustion at the long end of the range — "matches can run longer
+   * (until map resources are exhausted)". At 1200 it was the median: two sides
+   * working forward Outposts emptied the board in five minutes, well inside the
+   * 10–15 minute target, and every match after that point was fought with
+   * whatever was already standing. 2400 puts the floor of the economy past the
+   * end of a normal match while leaving exhaustion reachable in a long one.
+   */
+  nodeCapacity: 2400,
+};
+
+/**
+ * The opening a match is dealt (§8.2, §4).
+ *
+ * Cohort's worker identity is set-and-forget, so both sides begin with their
+ * workers already on the home cluster and the base already rallying new ones
+ * into the same loop. `sim/map.ts` owns that setup; this is the only number in
+ * it.
+ */
+export const OPENING = {
+  /**
+   * Home nodes the starting workers are split across.
+   *
+   * Two, because the home cluster is a pair (B-008). Opening on one patch would
+   * strip it and idle the side that owns it: four workers take about a third of
+   * a node's `nodeCapacity` per minute.
+   */
+  startingNodes: 2,
 };
 
 // Day/night cycle (§ designer request 2026-07-27). Ten real minutes per full
@@ -210,8 +265,69 @@ export const AI = {
   thinkInterval: 15,      // twice a second at 30Hz
   targetWorkers: 10,
   maxQueueDepth: 2,
-  /** Fighters before it commits to attacking. */
-  attackAtArmySize: 8,
+  /** Home patches the idle-worker sweep spreads across. Two: the home cluster
+   *  is a pair (B-008), and a crew that shares one patch walks to the
+   *  replacement all at once when it runs dry. */
+  gatherNodes: 2,
+  /**
+   * Fighters before it commits to attacking. Was 8.
+   *
+   * Eight was a wave that could not do anything on arrival once buildings
+   * stopped falling over, so the AI spent the match trickling small pushes into
+   * a defended base. Ten is the smallest wave that still forces the defender to
+   * answer with its whole army rather than its garrison.
+   */
+  attackAtArmySize: 10,
+  /**
+   * Fighters left before the wave is called spent and the survivors go home.
+   *
+   * The old rule was "attack until the last one is dead", which meant every
+   * unit trained during a push walked across the map alone into an intact
+   * army. Breaking off at a third of the commitment threshold is what turns a
+   * single terminal engagement into a rhythm of waves — measured, it is most of
+   * the difference between a match that resolves in three and a half minutes
+   * and one that runs the length §3 asks for.
+   */
+  regroupAtArmySize: 6,
+  /**
+   * How far ahead of the enemy's fighting strength the AI attacks without
+   * waiting for a full wave.
+   *
+   * `attackAtArmySize` alone answers only "am I ready", never "is he". Against
+   * an opponent who has stopped building — someone still learning the camera,
+   * or someone who has just lost an army — a fixed threshold leaves the AI at
+   * home massing against nothing, which reads as an opponent that is ignoring
+   * you. Between two equal sides this rule almost never fires, so a full wave
+   * stays the normal case and the pacing above is what governs a real match.
+   */
+  attackAdvantage: 4,
+  /** ...and the floor under it. Three units against nothing is not a reason to
+   *  walk an army across the board. */
+  attackMinArmySize: 8,
+  /**
+   * Fighters that never leave home, however good the attack looks.
+   *
+   * Must stay below `regroupAtArmySize`, or a wave that dies leaves the guard
+   * counted as a live army and the AI never rebuilds. Three is enough to make
+   * a broken-through attacker fight for the economy rather than walk into it,
+   * which is where the whole 2-minute razing tail at the end of a mirror match
+   * came from.
+   */
+  garrisonSize: 4,
+  /** How far in front of the base the army masses, along the line toward the
+   *  enemy. Far enough to be out of the mining lines, near enough that the
+   *  wave is still home defence until it is ordered off. */
+  stagingDistance: 14.0,
+  /**
+   * An enemy this close to anything the AI owns takes priority over whatever
+   * the army was doing.
+   *
+   * Slightly wider than a Standard's control radius, so the trigger is "inside
+   * my territory" rather than "already hitting my base" — an attacker that has
+   * reached weapon range of the Standard has already been allowed to pick the
+   * ground, which §2 says decides the fight.
+   */
+  defendRadius: 22.0,
   /** How far from its rally point an idle fighter may drift before being
    *  re-ordered. Slack, so it is not reissuing move orders every think. */
   rallySlack: 6.0,
@@ -222,6 +338,17 @@ export const AI = {
   expandRingStep: 3.5,
   expandRings: 5,
   expandAngles: 12,
+  /** A patch this far from a friendly drop-off counts as already served, so
+   *  the AI does not build a second Outpost onto a node it already works. Wider
+   *  than a worker's `dropoffRange` by a lot: the question is whether the patch
+   *  has somewhere to unload at all, not whether the walk is short. */
+  expandNodeRange: 26.0,
+  /** How far out the AI will claim a patch. Beyond this an expansion is closer
+   *  to the enemy's half than its own and cannot be held. */
+  expandReach: 70.0,
+  /** How far from a claimed patch its Outpost sits — outside the node's own
+   *  clearance, inside a worker's drop-off range. */
+  expandNodeStandoff: 5.0,
   /** Keep this much banked before researching, so teching never starves
    *  production entirely. */
   techReserve: 150,

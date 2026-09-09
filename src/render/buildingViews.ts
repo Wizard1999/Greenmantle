@@ -5,7 +5,10 @@ import { terrainHeightAt } from '../sim/terrain';
 import type { QualityTier } from './quality';
 import { lodDistance3D, lodForDistance, strategicMarkerScale } from './lod';
 import type { VisibilityController } from '../ui/visibility';
-import { boneMaterial, glowMaterial, mossMaterial } from './materials';
+import {
+  boneMaterial, glowMaterial, mossMaterial, selectionMarkMaterial, teamMarkMaterial,
+  territoryMarkMaterial,
+} from './materials';
 
 interface BuildingViewData {
   core: THREE.Mesh;
@@ -68,10 +71,11 @@ function makeBuildingView(scene: THREE.Scene, b: Building): THREE.Group {
   light.position.y = 2.5 * s;
   detailRoot.add(light);
 
+  // Shared mark materials, not per-building literals. The three colours below
+  // used to be four hardcoded hexes that agreed with nothing else on the board;
+  // they now come from the one identity table in `palette.ts` (BENCHMARKS §2.3).
   const sel = new THREE.Mesh(
-    new THREE.RingGeometry(t.radius + 0.15, t.radius + 0.38, 28),
-    new THREE.MeshBasicMaterial({ color: 0xffe66d, side: THREE.DoubleSide, transparent: true, opacity: 0.9 }),
-  );
+    new THREE.RingGeometry(t.radius + 0.15, t.radius + 0.38, 28), selectionMarkMaterial());
   sel.rotation.x = -Math.PI / 2;
   sel.position.y = 0.06;
   sel.visible = false;
@@ -79,11 +83,7 @@ function makeBuildingView(scene: THREE.Scene, b: Building): THREE.Group {
 
 
   const strategicMarker = new THREE.Mesh(
-    new THREE.CircleGeometry(Math.max(0.9, t.radius * 0.42), 14),
-    new THREE.MeshBasicMaterial({
-      color: isPlayer ? 0x6ea8ff : 0xff7a6e,
-      side: THREE.DoubleSide, transparent: true, opacity: 0.9, depthWrite: false,
-    }),
+    new THREE.CircleGeometry(Math.max(0.9, t.radius * 0.42), 14), teamMarkMaterial(b.team),
   );
   strategicMarker.rotation.x = -Math.PI / 2;
   strategicMarker.position.y = 0.12;
@@ -101,9 +101,7 @@ function makeBuildingView(scene: THREE.Scene, b: Building): THREE.Group {
   for (let i = 0; i < rp.count; i++) {
     rp.setY(i, terrainHeightAt(b.x + rp.getX(i), b.z + rp.getZ(i)) + 0.09);
   }
-  const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
-    color: isPlayer ? 0x6ea8ff : 0xff7a6e, transparent: true, opacity: 0.4, side: THREE.DoubleSide,
-  }));
+  const ring = new THREE.Mesh(ringGeo, territoryMarkMaterial(b.team));
   ring.position.set(b.x, 0, b.z);
   scene.add(ring);
   g.userData = {

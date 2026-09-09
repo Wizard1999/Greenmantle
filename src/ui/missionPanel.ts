@@ -54,16 +54,44 @@ export const STATUS_LABEL: Record<MissionStatus, string> = {
 };
 
 /**
- * Stated because the alternative is letting the player infer it from silence.
- * A mission is inert on its own (D-027) — assigning a squad to an assault does
- * not yet make it assault — and a panel that showed the assignment without
- * saying so would be describing a game that does not exist yet.
+ * How a mission relates to a chain, stated because the player cannot see it.
  *
- * **Delete this the day missions drive squad behaviour.** It is a fact about
- * the current build, and a stale fact reads as a lie.
+ * This note previously read "A mission records intent. It does not yet drive
+ * squad behaviour." That was true under D-027 and stopped being true under
+ * **D-041**, which made an objective resolve to ground and hand `squads.ts` a
+ * plan. It was left behind and became the panel's one false sentence — its own
+ * comment said "delete this the day missions drive squad behaviour", and that
+ * day had already passed.
+ *
+ * The replacement states D-041's two layering rules, which are the facts a
+ * player has no way to discover by watching: a mission supplies behaviour to a
+ * squad that has none, and never overwrites a chain the player wrote.
  */
-export const MISSION_INERT_NOTE =
-  'A mission records intent. It does not yet drive squad behaviour.';
+export const MISSION_LAYER_NOTE =
+  'A mission supplies behaviour to a squad with no chain of its own, '
+  + 'and never overwrites a chain you wrote.';
+
+/**
+ * What each objective resolves to, from `sim/missions.ts`.
+ *
+ * These are the tooltips on the order buttons. The player names what a squad is
+ * *for* and the simulation works out where (D-003, D-041) — which is the whole
+ * premise of the layer and is invisible from a row of seven buttons labelled
+ * with verbs. Each line states the ground and the posture, and nothing else.
+ *
+ * `escort` and `custom` say plainly that they resolve to nothing. D-041 chose a
+ * visibly unimplemented objective over one that quietly guesses; a button that
+ * looks identical to the six that work is not visible.
+ */
+export const OBJECTIVE_NOTE: Record<MissionObjective, string> = {
+  assault: 'Presses to the nearest enemy structure, engaging what it meets.',
+  defend: 'Holds the nearest structure you already own, and is not drawn off it.',
+  scout: 'Paces to the nearest enemy structure and back, without committing.',
+  escort: 'Resolves to no ground: a mission carries no subject to escort yet.',
+  expand: 'Presses to the nearest resource outside your control.',
+  harvest: 'Puts the squad\'s workers on the nearest resource with something left.',
+  custom: 'Resolves to no ground: the squad runs the chain you write for it.',
+};
 
 /** Concluded operations kept on screen. A cancelled mission is still a record
  *  of an order the player gave, but the list must not grow without bound over
@@ -227,7 +255,9 @@ export interface MissionSummary {
   priority: MissionPriority;
   squadNumbers: number[];
   fallback: Place | null;
-  rows: Array<{ label: string; value: string }>;
+  /** Where the objective resolved to, or null while it has not. */
+  ground: Place | null;
+  rows: Array<{ label: string; value: string; detail?: string }>;
 }
 
 export function missionSummary(world: World, mission: Mission): MissionSummary {
@@ -236,6 +266,7 @@ export function missionSummary(world: World, mission: Mission): MissionSummary {
     .filter((n): n is number => n !== undefined)
     .sort((a, b) => a - b);
   const fallback = mission.fallback ? placeOf(world, mission.team, mission.fallback) : null;
+  const ground = mission.target ? placeOf(world, mission.team, mission.target) : null;
   return {
     id: mission.id,
     objective: mission.objective,
@@ -243,8 +274,22 @@ export function missionSummary(world: World, mission: Mission): MissionSummary {
     priority: mission.priority,
     squadNumbers,
     fallback,
+    ground,
     rows: [
-      { label: 'Objective', value: OBJECTIVE_LABEL[mission.objective] },
+      {
+        label: 'Objective',
+        value: OBJECTIVE_LABEL[mission.objective],
+        detail: OBJECTIVE_NOTE[mission.objective],
+      },
+      // The half of "intent over execution" the player cannot otherwise see:
+      // they named what the squad is for, and this is the ground the simulation
+      // worked out from it (D-041). An unresolved objective says so — a blank
+      // would read as a panel that had not finished loading.
+      {
+        label: 'Ground',
+        value: ground ? ground.short : 'not resolved',
+        detail: ground ? ground.long : OBJECTIVE_NOTE[mission.objective],
+      },
       { label: 'Status', value: STATUS_LABEL[mission.status] },
       { label: 'Priority', value: PRIORITY_LABEL[mission.priority] },
       { label: 'Squads', value: squadNumbers.length ? squadNumbers.join(', ') : 'none' },
@@ -314,7 +359,7 @@ export function createMissionPanel(
   // clicked and the DOM is not thrashed sixty times a second.
   let renderedKey = '';
 
-  note.textContent = MISSION_INERT_NOTE;
+  note.textContent = MISSION_LAYER_NOTE;
 
   const squadById = (id: EntityId): Squad | undefined => world.squads.find(s => s.id === id);
 
@@ -452,6 +497,7 @@ export function createMissionPanel(
       const dt = document.createElement('dt');
       dt.textContent = row.label;
       const dd = document.createElement('dd');
+      if (row.detail) { dt.title = row.detail; dd.title = row.detail; }
 
       if (row.label === 'Priority' && live) {
         dd.className = 'op-priority';
@@ -590,7 +636,7 @@ export function createMissionPanel(
     const btn = document.createElement('button');
     btn.textContent = OBJECTIVE_LABEL[objective];
     btn.dataset['objective'] = objective;
-    btn.title = `Order a ${OBJECTIVE_LABEL[objective]} operation`;
+    btn.title = `${OBJECTIVE_LABEL[objective]} — ${OBJECTIVE_NOTE[objective]}`;
     btn.onclick = () => create(objective);
     newRow.append(btn);
   }
@@ -601,9 +647,13 @@ export function createMissionPanel(
 
     const key = [
       String(selectedId),
+      // `target` is in the key because the Ground row reports it and it is
+      // resolved a tick or more after the mission is created — omitting it
+      // would leave the panel reading "not resolved" for the rest of the match.
       world.missions.filter(m => m.team === TEAM).map(m =>
         [m.id, m.objective, m.status, m.priority, m.squadIds.join('.'),
-          m.fallback ? `${m.fallback.x},${m.fallback.z}` : ''].join('/')).join('|'),
+          m.fallback ? `${m.fallback.x},${m.fallback.z}` : '',
+          m.target ? `${m.target.x},${m.target.z}` : ''].join('/')).join('|'),
       world.squads.filter(s => s.team === TEAM).map(s => `${s.id}:${s.number}`).join('.'),
       world.buildings.filter(b => b.team === TEAM).map(b => b.id).join('.'),
     ].join('#');
@@ -612,6 +662,17 @@ export function createMissionPanel(
     // The note is only true of a build that has an operation in it, and an
     // empty panel is cheaper on screen without it.
     note!.hidden = model.missions.length === 0;
+
+    // Say that there is more below the fold. At 1366x768 with two operations
+    // open the record box shows 131px of 337px, and the fields that fall
+    // outside — Priority, Squads, Fallback, every squad card and Cancel
+    // operation — read as absent rather than as scrolled: measured, with the
+    // panel's own scrollbar not drawn until the box is touched. A control the
+    // player cannot know exists is as good as one they cannot click.
+    body!.classList.toggle(
+      'has-more',
+      body!.scrollHeight - body!.scrollTop - body!.clientHeight > 2,
+    );
 
     // Live text every frame: a squad's activity and position change constantly
     // and neither belongs in the rebuild key.

@@ -30,17 +30,36 @@ describe('[6] gather loop', () => {
 });
 
 // [7] conservation — nothing created or destroyed
+//
+// Both cases used to be written from the player's side alone, because the map
+// dealt an opening in which only the player was ever told to mine. Once
+// `map.ts` put both sides to work at tick 0 (MAP_VERSION 7) the one-sided sum
+// came up 235 short — exactly the rival's bank — and `rival gained nothing`
+// began reporting that the opening works rather than that nothing leaks. The
+// law is about the whole map, so it is now summed over the whole map. The
+// second case keeps the teeth the old one had: essence must be credited to the
+// team that mined it, tested by removing the other crew rather than by assuming
+// nobody ever told it to work.
 describe('[7] conservation', () => {
   const w = freshMap();
   const startOnMap = totalResourcesRemaining(w);
   cmdGather(w, workersOf(w, 'player').map(u => u.id), must(w.nodes[0]).id);
   run(w, 1500);
-  const carried = workersOf(w, 'player').reduce((s, u) => s + gatherOf(u).carrying, 0);
+  const carried = [...workersOf(w, 'player'), ...workersOf(w, 'rival')]
+    .reduce((s, u) => s + gatherOf(u).carrying, 0);
 
   it('banked + carried + remaining == starting total', () => {
-    expect(w.resources.player + carried + totalResourcesRemaining(w)).toBe(startOnMap);
+    expect(w.resources.player + w.resources.rival + carried + totalResourcesRemaining(w))
+      .toBe(startOnMap);
   });
-  it('rival gained nothing', () => expect(w.resources.rival).toBe(0));
+
+  it('essence is credited to the team that mined it', () => {
+    const solo = freshMap();
+    solo.units = solo.units.filter(u => !(u.team === 'rival' && u.gather));
+    run(solo, 1500);
+    expect(solo.resources.player).toBeGreaterThan(0);
+    expect(solo.resources.rival).toBe(0);
+  });
 });
 
 // [8] carry amounts are exact multiples (no rounding drift)

@@ -24,7 +24,8 @@ import { createCommandFeedback } from './render/commandFeedback';
 import { createPicker, createUiState } from './input/selection';
 import { createKeyboard } from './input/keyboard';
 import { createMouse } from './input/mouse';
-import { createHud } from './ui/hud';
+import { RESOURCE_LABEL, createHud } from './ui/hud';
+import { createVictoryOverlay } from './ui/victory';
 import { createResearchPanel } from './ui/researchPanel';
 import { createMissionPanel } from './ui/missionPanel';
 import { createChainEditor } from './ui/chainEditor';
@@ -88,6 +89,8 @@ const ghost = createPlacementGhost(scene);
 const ui = createUiState();
 const picker = createPicker(cam.camera, terrainMesh, views);
 const hud = createHud(world, ui);
+// The match result is its own surface, not a flash message (see ui/victory.ts).
+const victory = createVictoryOverlay(world);
 const researchPanel = createResearchPanel(world, hud.flash);
 const missionPanel = createMissionPanel(world, ui, hud.flash);
 const chainEditor = createChainEditor(world, ui, hud.flash);
@@ -195,7 +198,7 @@ const keyboard = createKeyboard({
           () => cmdCancelSite(world, ui.selectedSiteId as number),
         );
         ui.selectedSiteId = null;
-        hud.flash('site cancelled, essence refunded');
+        hud.flash(`site cancelled, ${RESOURCE_LABEL} refunded`);
       }
     }
     if (k === 'b' && world.units.some(u => u.selected && u.gather)) ui.placingType = 'outpost';
@@ -242,6 +245,7 @@ const loop = createLoop({
     chainVisuals.sync(world.squads.find(s => s.id === ui.selectedSquadId) ?? null);
     commandFeedback.update(realDt);
     hud.update(now, loop.isThrottled());
+    victory.update();
     researchPanel.update();
     missionPanel.update();
     chainEditor.update();

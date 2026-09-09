@@ -133,14 +133,32 @@ describe('a player can finish the tutorial', () => {
 
     expect(step()).toBe(0);
 
-    // 1 — select a caretaker.
+    // The gather step is already satisfied before the player touches anything.
+    //
+    // `map.ts` MAP_VERSION 7 deals every side a running economy at tick 0 —
+    // which is what §8.2 asks for and what took the player side from banking
+    // zero essence in twenty minutes to banking 665 — and step 2's predicate
+    // reads world state ("some player worker is gathering") rather than a
+    // player action. No state-only predicate can tell the opening's gather
+    // order from the player's, so this is not fixable inside `tutorial.ts`:
+    // it needs the guide to observe the *command stream* (`replay/live.ts` is
+    // the seam) or the step to teach something else. Pinned here rather than
+    // hidden behind a softened index, because the visible consequence is that
+    // the guide jumps from "Step 1 of 7" to "Step 3 of 7" and never shows
+    // "Recover Legacy" at all. Owned by G-01 in docs/GATES.md.
+    expect(tutorialSnapshot(context).gatheringWorker).toBe(true);
+
+    // 1 — select a caretaker. Completing it uncovers the pre-satisfied step 2,
+    // so the index lands on 2 rather than 1.
     const worker = must(world.units.find(u => u.team === 'player' && u.gather), 'worker');
     cmdSetSelection(world, [worker.id]);
-    expect(step()).toBe(1);
+    expect(step()).toBe(2);
 
-    // 2 — send it to a node.
+    // 2 — send it to a node. Still the gesture the guide asks for, and still
+    // accepted by the sim; it simply no longer moves the index, because the
+    // opening moved it first.
     const node = must(world.nodes[0], 'resource node');
-    cmdGather(world, [worker.id], node.id);
+    expect(cmdGather(world, [worker.id], node.id)).toHaveLength(1);
     expect(step()).toBe(2);
 
     // 3 — select the Standard. `input/mouse.ts` clears the unit selection first:

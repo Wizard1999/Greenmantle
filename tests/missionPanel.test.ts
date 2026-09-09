@@ -10,9 +10,10 @@ import { cmdCreateMission, cmdSetMissionFallback } from '../src/sim/missions';
 import { Recorder, playback } from '../src/sim/replay';
 import { hash } from '../src/sim/snapshot';
 import { createWorld, simStep } from '../src/sim/world';
+import type { MissionSummary } from '../src/ui/missionPanel';
 import {
-  CONCLUDED_SHOWN, MISSION_INERT_NOTE, OBJECTIVE_LABEL, OBJECTIVE_ORDER,
-  PRIORITY_LABEL, PRIORITY_ORDER, STATUS_LABEL,
+  CONCLUDED_SHOWN, MISSION_LAYER_NOTE, OBJECTIVE_LABEL, OBJECTIVE_NOTE,
+  OBJECTIVE_ORDER, PRIORITY_LABEL, PRIORITY_ORDER, STATUS_LABEL,
   bearingBetween, missionPanelModel, missionSummary, placeOf, referenceBuilding,
   squadActivity, squadCard, squadName, squadPosition,
 } from '../src/ui/missionPanel';
@@ -150,11 +151,17 @@ describe('squad cards', () => {
 });
 
 describe('mission summary', () => {
+  /** By label, not by index — the row list grows, and a positional assertion
+   *  starts testing a different field silently when it does. */
+  const rowValue = (summary: MissionSummary, label: string): string =>
+    must(summary.rows.find(r => r.label === label), `${label} row`).value;
+
   it('carries exactly the fields the blueprint specifies, in order', () => {
     const world = peacefulMap();
     const labels = missionSummary(world, newMission(world, 'player', 'assault'))
       .rows.map(r => r.label);
-    expect(labels).toEqual(['Objective', 'Status', 'Priority', 'Squads', 'Fallback']);
+    expect(labels).toEqual(
+      ['Objective', 'Ground', 'Status', 'Priority', 'Squads', 'Fallback']);
   });
 
   it('lists assigned squads by number, the way the blueprint prints them', () => {
@@ -164,14 +171,32 @@ describe('mission summary', () => {
     const mission = newMission(world, 'player', 'defend', { squadIds: [two.id, one.id] });
     const summary = missionSummary(world, mission);
     expect(summary.squadNumbers).toEqual([1, 2]);
-    expect(must(summary.rows[3], 'squads row').value).toBe('1, 2');
+    expect(rowValue(summary, 'Squads')).toBe('1, 2');
   });
 
   it('says "none" rather than leaving a field blank', () => {
     const world = peacefulMap();
     const summary = missionSummary(world, newMission(world, 'player', 'scout'));
-    expect(must(summary.rows[3], 'squads row').value).toBe('none');
-    expect(must(summary.rows[4], 'fallback row').value).toBe('none');
+    expect(rowValue(summary, 'Squads')).toBe('none');
+    expect(rowValue(summary, 'Fallback')).toBe('none');
+  });
+
+  it('reports the ground the objective resolved to, and says so when it has not', () => {
+    // The panel's one claim about D-041: the player names what a squad is for
+    // and the simulation works out where. An unresolved objective has to say so
+    // rather than print a blank, which reads as a panel still loading.
+    const world = peacefulMap();
+    const unresolved = missionSummary(world, newMission(world, 'player', 'assault'));
+    expect(unresolved.ground).toBeNull();
+    expect(rowValue(unresolved, 'Ground')).toBe('not resolved');
+
+    const squad = formSquad(world, 1);
+    const mission = newMission(world, 'player', 'assault', { squadIds: [squad.id] });
+    simStep(world);
+    expect(mission.target).not.toBeNull();
+    const resolved = missionSummary(world, mission);
+    expect(rowValue(resolved, 'Ground')).toBe(must(resolved.ground, 'ground').short);
+    expect(rowValue(resolved, 'Ground')).not.toBe('not resolved');
   });
 
   it('describes a fallback as a place', () => {
@@ -263,7 +288,8 @@ describe('information, never advice', () => {
       ...Object.values(OBJECTIVE_LABEL),
       ...Object.values(PRIORITY_LABEL),
       ...Object.values(STATUS_LABEL),
-      MISSION_INERT_NOTE,
+      ...Object.values(OBJECTIVE_NOTE),
+      MISSION_LAYER_NOTE,
     ];
     for (const text of shipped) expect(text, text).not.toMatch(ADVICE);
   });
@@ -281,10 +307,26 @@ describe('information, never advice', () => {
     expect([...PRIORITY_ORDER].sort()).toEqual(Object.keys(PRIORITY_LABEL).sort());
   });
 
-  it('says plainly that a mission does not yet drive behaviour', () => {
-    // D-027: the primitive is deliberately inert. Showing an assignment without
-    // saying so would describe a game that does not exist yet.
-    expect(MISSION_INERT_NOTE).toMatch(/does not yet/i);
+  it('states how a mission layers over a chain, and no longer claims it is inert', () => {
+    // The note read "does not yet drive squad behaviour" until D-041 made it
+    // drive squad behaviour, at which point the panel's one standing sentence
+    // became its one false one. This guards the replacement against the same
+    // decay: it must state both halves of D-041's layering rule.
+    expect(MISSION_LAYER_NOTE).not.toMatch(/does not yet|inert/i);
+    expect(MISSION_LAYER_NOTE).toMatch(/supplies behaviour/i);
+    expect(MISSION_LAYER_NOTE).toMatch(/never overwrites/i);
+  });
+
+  it('describes what every objective resolves to, including the two that do not', () => {
+    // D-041 kept `escort` and `custom` visibly unimplemented rather than have
+    // them guess at ground. A button that looks identical to the six that work
+    // is not visible, so the note is where that shows.
+    expect(Object.keys(OBJECTIVE_NOTE).sort()).toEqual(Object.keys(OBJECTIVE_LABEL).sort());
+    for (const [objective, note] of Object.entries(OBJECTIVE_NOTE)) {
+      expect(note.length, objective).toBeGreaterThan(0);
+    }
+    expect(OBJECTIVE_NOTE.escort).toMatch(/no ground/i);
+    expect(OBJECTIVE_NOTE.custom).toMatch(/no ground/i);
   });
 });
 

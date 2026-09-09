@@ -70,7 +70,7 @@ Imports `core/` and `data/` **only**.
 | `tech.ts` | Research engine. Modifiers **derived** from the researched list, never baked into units (D-028). |
 | `terrain.ts` | Single source of truth for terrain height; the render mesh samples this rather than duplicating the formula. |
 | `mapBoundary.ts` | Generated polygon play area; orders and movement are clamped to it. |
-| `map.ts` | Map assembly + `MAP_VERSION`. Map seed is separate from match seed (D-017). |
+| `map.ts` | Map assembly + `MAP_VERSION`, and the opening each side is dealt: starting workers on the home cluster and a gather rally on the base, issued through the command layer (§8.2). Map seed is separate from match seed (D-017). |
 | `daynight.ts` | Day/night cycle derived from `world.tick` — never wall clock (D-013). |
 | `snapshot.ts` | `snapshot()` / `restore()` / `hash()`. The foundation under replays, save/load and desync detection. |
 | `replay.ts` | `Command` union, `dispatch()`, `Recorder`, `playback()`, `REPLAY_VERSION`. |
@@ -92,8 +92,10 @@ Imports `core/` and `data/` **only**.
 | `quality.ts` | Low/medium/high tiers. The *look* is not tiered; the *cost* is. |
 | `lod.ts` | Camera-distance level of detail — real silhouettes close, strategic markers at table scale. |
 | `terrainMesh.ts` | Ground mesh, polygon skirt, World Turtle far-zoom silhouette (D-026). |
-| `unitViews.ts` | Unit meshes; interpolates with the loop's `alpha`. |
+| `unitViews.ts` | Unit meshes; interpolates with the loop's `alpha`. Also drives the status layer and the death animation, because the frame callback already hands it the world, camera, alpha, tier, visibility and squad membership. |
 | `buildingViews.ts` | Building meshes — fossil-and-glow, not machinery (§8.8). |
+| `healthBars.ts` | The status layer: health bars, squad decorators, construction progress, and the ground rings carrying team identity, selection and squad membership. Two instanced batches for the whole board (BENCHMARKS §2.2). The mark policy is a pure function over world state, so "no marks at full health" is a test rather than a claim. |
+| `combatFeedback.ts` | Impacts and deaths. Diffs hit points frame to frame rather than asking the sim for events, and draws them from one pooled instanced batch allocated at startup (§2.6). |
 | `siteViews.ts` | Construction sites in progress. |
 | `nodeViews.ts` | Resource nodes; shrink visibly as they deplete. |
 | `sceneryViews.ts` | Decorative rocks and trees; culled beyond tactical range. |
@@ -119,7 +121,8 @@ lerp using the loop's `alpha`. That is why a 30 Hz sim looks smooth at 144 fps.
 
 | File | Purpose |
 |---|---|
-| `hud.ts` | Resources, supply, clock, selection card, victory announcement. Feeds `debugReadout.ts` rather than owning debug DOM. |
+| `hud.ts` | Resources, supply, clock, selection card. Names the gatherable **Legacy** (`RESOURCE_LABEL`, D-033) and translates the simulation's older "essence" refusals at the point of display (`playerWording`); `refusal()` turns a `CommandResult` into the sentence a greyed button shows instead of only greying it. No longer announces the winner — `victory.ts` owns that. Feeds `debugReadout.ts` rather than owning debug DOM. |
+| `victory.ts` | The match outcome surface: who won, why, and how long it took. Replaces a 1.6-second `flash()` that shared a channel with "orders stopped". `matchOutcome()` is plain data so `tests/victory.test.ts` can assert what it says without a DOM; the panel builds its own DOM the way `controlsSheet.ts` does and is styled from `index.html` in the same warm-vellum material (D-032). |
 | `controlsSheet.ts` | The control reference and settings host — `?` or the Keys button. `CONTROL_GROUPS` is plain data so `tests/controlsSheet.test.ts` can assert coverage without a DOM (D-032). |
 | `debugReadout.ts` | Frame/tick/economy readout, built **only** when `?dev=` is present. In a player build it is an inert object and no panel exists (D-032). |
 | `chainEditor.ts` | Behaviour-chain editor. |
@@ -156,6 +159,12 @@ lerp using the loop's `alpha`. That is why a 30 Hz sim looks smooth at 144 fps.
 | `site.ts` / `site.css` | The public development page (`development.html`). Badges all art as concept art automatically. |
 | `gauntlet.ts` / `gauntlet.css` | The live build-loop record (`gauntlet.html`) — each piece, the bar it is judged against, critic verdicts, and what is held back. Reads the same `progress.json` as `site.ts`, so the two pages cannot disagree. |
 | `main.ts` | Game entry point: wires world, renderer, input, UI, recorder, loop. |
+
+
+> **Designer questions live in `docs/GATES.md`.** Work never stops at a
+> gate: everything not depending on the answer gets built, and the question
+> is written down with its options and cost. This project has twice lost
+> decisions that were made in conversation and never reached a file.
 
 ## `scripts/` — build and verification tooling
 
@@ -248,3 +257,11 @@ distinction has already been got wrong once:
 |---|---|
 | `tests/missions.test.ts` | The mission primitive — creation, assignment, lifecycle, hashing, replay of the commands themselves. |
 | `tests/missionOrders.test.ts` | What a mission makes its squads *do* (D-041) — objective resolution, withdrawal doctrine, Command bandwidth, and a replay of a match where a mission did all the driving. |
+| `tests/hud.test.ts` | What the HUD *says*: one name for the gatherable, and a refusal that arrives with a reason. Asserts against the live `canTrain`/`canPlaceBuilding` results rather than against the source of files it does not own, so it keeps passing when they are corrected. |
+| `tests/victory.test.ts` | What the outcome surface says, and — in its last block — that it is ever reached: it plays the match `main.ts` sets up until a winner exists. An outcome screen behind a match that never ends is a feature nobody can demo. |
+| `tests/ai.test.ts` | What the CPU opponent *does*: advances to contact under attack-move rather than a march order that `stepPursuit` refuses to divert, moves in waves and breaks off when one is spent, keeps a home guard, answers a raid on its own territory, expands onto essence it is not already working, and names no unit type (D-029). |
+| `tests/matchFlow.test.ts` | A match end to end: both openings gather at tick 0 and rally new workers into the same loop (§8.2), essence is conserved while both sides mine, and a mirror match reaches a winner. The second AI is driven from the test through `stepAi`, since `World` carries only one. |
+
+Layout is not testable here. The suite runs in node with no DOM, so panel
+geometry, pointer events and click reachability are measured in a real browser
+by `scripts/measure-hud.mjs` and reported as numbers (D-032).

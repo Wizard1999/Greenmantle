@@ -1,4 +1,4 @@
-import type { UnitTypeKey, World } from '../core/types';
+import type { CommandResult, UnitTypeKey, World } from '../core/types';
 import { TICK_HZ } from '../core/loop';
 import { BUILDING_TYPES } from '../data/buildings';
 import { UNIT_TYPES } from '../data/units';
@@ -22,6 +22,41 @@ const el = (id: string): HTMLElement => {
 /** Matches `--alert` in index.html. The only inline colour the HUD sets. */
 const ALERT = '#a33a2a';
 
+/**
+ * The gatherable's one player-facing name (D-033: the gatherable *is* Legacy).
+ *
+ * The resources bar said "essence" while the tutorial and the research panel
+ * said "Legacy", so a player saw two words for one number. D-021 deferred the
+ * global rename until the four-resource schema was settled; D-033 settled it.
+ * Internal field names (`world.resources`) and the save magic string are format
+ * identifiers and stay as they are, on D-030's precedent.
+ */
+export const RESOURCE_LABEL = 'Legacy';
+
+/**
+ * Sim refusal strings, translated into the vocabulary the player is shown.
+ *
+ * `sim/production.ts` and `sim/construction.ts` still return "not enough
+ * essence"; both files are outside this slice's ownership, so the rename is
+ * applied here at the point of display rather than left half-done. When those
+ * strings are corrected at source this becomes a no-op rather than a
+ * double-rename, which is why it matches the word rather than the sentence.
+ */
+export function playerWording(text: string): string {
+  return text.replace(/\bessence\b/gi, RESOURCE_LABEL);
+}
+
+/**
+ * The sentence a refused control shows, or `null` when it is not refused.
+ *
+ * `canTrain` has always returned `{ ok, reason }` and the HUD read only `ok`,
+ * so three greyed buttons said nothing about what was missing. A control that
+ * refuses without saying why teaches the player that the game is broken.
+ */
+export function refusal(result: CommandResult): string | null {
+  return result.ok ? null : playerWording(result.reason ?? 'unavailable');
+}
+
 export interface Hud {
   flash: (msg: string) => void;
   tryTrain: (unitType: UnitTypeKey) => void;
@@ -33,7 +68,7 @@ export function createHud(world: World, ui: UiState): Hud {
   // this is inert and there is no panel in the DOM at all.
   const debug = createDebugReadout();
   const resUi = {
-    essence: el('r-essence'), gathering: el('r-gathering'),
+    legacy: el('r-legacy'), gathering: el('r-gathering'),
     workers: el('r-workers'), remaining: el('r-remaining'), supply: el('r-supply'),
     chains: el('r-chains'),
   };
@@ -44,7 +79,6 @@ export function createHud(world: World, ui: UiState): Hud {
   const cardHint = el('card-hint');
   const flashEl = el('flash');
 
-  let announcedWinner = false;
   let flashTimer: ReturnType<typeof setTimeout> | undefined;
   function flash(msg: string): void {
     flashEl.textContent = msg;
@@ -60,7 +94,7 @@ export function createHud(world: World, ui: UiState): Hud {
       { t: 'train', building, unit: unitType },
       () => cmdTrain(world, building, unitType),
     );
-    if (!res.ok) flash(res.reason ?? 'cannot train that');
+    if (!res.ok) flash(refusal(res) ?? 'cannot train that');
   }
 
   // Rebuilt only when the selection changes, so buttons stay clickable.
@@ -90,7 +124,7 @@ export function createHud(world: World, ui: UiState): Hud {
         // used to be the second line ("full refund", "engage along route") is a
         // tooltip and lives in full in the controls sheet — at five buttons the
         // card's columns are ~100px and prose clipped inside them (D-032).
-        btn.title = 'Cancel this build site and refund the essence in full';
+        btn.title = `Cancel this build site and refund the ${RESOURCE_LABEL} in full`;
         btn.innerHTML = '<b>Cancel</b><span class="c">Esc · refund</span>';
         btn.onclick = () => {
           issueCommand(
@@ -98,20 +132,21 @@ export function createHud(world: World, ui: UiState): Hud {
             () => cmdCancelSite(world, site.id),
           );
           ui.selectedSiteId = null;
-          flash('site cancelled, essence refunded');
+          flash(`site cancelled, ${RESOURCE_LABEL} refunded`);
         };
         cardBtns.appendChild(btn);
         cardHint.textContent = 'right-click the site with a worker selected to resume';
       } else if (b) {
         const t = BUILDING_TYPES[b.type];
-        cardTitle.textContent = `${t.label} — +${t.command} command`;
+        cardTitle.textContent = `${t.label} — +${t.command} Command`;
         const hotkeys: Partial<Record<UnitTypeKey, string>> = { worker: 'Q', legionnaire: 'E', marksman: 'R' };
         for (const ut of t.produces) {
           const u = UNIT_TYPES[ut];
           const btn = document.createElement('button');
           const key = hotkeys[ut];
-          btn.title = `Train a ${u.label} — ${u.cost} essence, ${u.supply} command`;
-          btn.innerHTML = `<b>${u.label}</b><span class="c">${key ? `${key} · ` : ''}${u.cost}</span>`;
+          btn.title = `Train a ${u.label} — ${u.cost} ${RESOURCE_LABEL}, ${u.supply} Command`;
+          btn.dataset['cost'] = `${key ? `${key} · ` : ''}${u.cost}`;
+          btn.innerHTML = `<b>${u.label}</b><span class="c">${btn.dataset['cost']}</span>`;
           btn.dataset['unit'] = ut;
           btn.onclick = () => tryTrain(ut);
           cardBtns.appendChild(btn);
@@ -123,12 +158,13 @@ export function createHud(world: World, ui: UiState): Hud {
         if (workers) {
           const t = BUILDING_TYPES.outpost;
           const btn = document.createElement('button');
-          btn.title = `Site an outpost — ${t.cost} essence, +${t.command} command, holds territory`;
-          btn.innerHTML = `<b>Outpost</b><span class="c">B · ${t.cost}</span>`;
+          btn.title = `Site an outpost — ${t.cost} ${RESOURCE_LABEL}, +${t.command} Command, holds territory`;
+          btn.dataset['cost'] = `B · ${t.cost}`;
+          btn.innerHTML = `<b>Outpost</b><span class="c">${btn.dataset['cost']}</span>`;
           btn.dataset['build'] = 'outpost';
           btn.onclick = () => { ui.placingType = 'outpost'; };
           cardBtns.appendChild(btn);
-          cardHint.textContent = 'outposts add command, hold territory, and accept essence';
+          cardHint.textContent = `outposts add Command, hold territory, and accept ${RESOURCE_LABEL}`;
         }
         const combat = sel.some(u => !u.gather);
         if (combat) {
@@ -159,15 +195,29 @@ export function createHud(world: World, ui: UiState): Hud {
       }
     }
 
-    // live state on every frame: affordability and queue
+    // Live state on every frame: affordability, the reason for a refusal, and
+    // the queue. The reason goes on the button's own second line — the line
+    // that otherwise carries the cost — because that is where the player is
+    // already looking when they find the button greyed, and a tooltip is only
+    // read by someone who already suspects there is something to read.
     for (const child of cardBtns.children) {
       const btn = child as HTMLButtonElement;
       const unit = btn.dataset['unit'] as UnitTypeKey | undefined;
       const build = btn.dataset['build'];
+      let why: string | null = null;
       if (unit) {
-        btn.disabled = !(b && canTrain(world, b.id, unit).ok);
+        why = b ? refusal(canTrain(world, b.id, unit)) : 'select a structure first';
       } else if (build === 'outpost') {
-        btn.disabled = world.resources.player < BUILDING_TYPES.outpost.cost;
+        const cost = BUILDING_TYPES.outpost.cost;
+        why = world.resources.player < cost ? `not enough ${RESOURCE_LABEL}` : null;
+      } else {
+        continue;
+      }
+      btn.disabled = why !== null;
+      const line = btn.querySelector('.c');
+      if (line) {
+        line.textContent = why ?? btn.dataset['cost'] ?? '';
+        line.classList.toggle('why', why !== null);
       }
     }
 
@@ -192,7 +242,7 @@ export function createHud(world: World, ui: UiState): Hud {
   let frameCount = 0;
   let tickAtLastSample = 0;
   let lastSample = 0;
-  let essenceAtLastSample = 0;
+  let legacyAtLastSample = 0;
 
   function update(now: number, throttled: boolean): void {
     frameCount++;
@@ -200,11 +250,11 @@ export function createHud(world: World, ui: UiState): Hud {
       const elapsed = (now - lastSample) / 1000;
       const fps = frameCount / elapsed;
       const tps = (world.tick - tickAtLastSample) / elapsed;
-      const measuredRate = ((world.resources.player - essenceAtLastSample) / elapsed) * 60;
+      const measuredRate = ((world.resources.player - legacyAtLastSample) / elapsed) * 60;
 
       frameCount = 0;
       tickAtLastSample = world.tick;
-      essenceAtLastSample = world.resources.player;
+      legacyAtLastSample = world.resources.player;
       lastSample = now;
 
       debug.sampled({
@@ -233,15 +283,11 @@ export function createHud(world: World, ui: UiState): Hud {
       `conic-gradient(#ffd9a0 0 ${lit}%, #2b3557 ${lit}% 100%)`;
     clockUi.dial.title = `Day ${dayNumber(world) + 1} — ${period}`;
 
-    // The match is over: say so once, plainly. Information, never advice
-    // (UI_BLUEPRINT § "Information, never advice").
-    if (world.winner && !announcedWinner) {
-      announcedWinner = true;
-      flash(world.winner === 'player' ? 'VICTORY — enemy base destroyed'
-                                      : 'DEFEAT — your base was destroyed');
-    }
+    // The end of the match is NOT announced here. It used to be a `flash()`,
+    // which is the same 1.6-second channel as "orders stopped" — a result the
+    // player can miss by looking away. `ui/victory.ts` owns the outcome now.
 
-    resUi.essence.textContent = String(world.resources.player);
+    resUi.legacy.textContent = String(world.resources.player);
     resUi.gathering.textContent = String(countGathering(world, 'player'));
     resUi.workers.textContent = String(world.units.filter(u => u.team === 'player' && u.gather).length);
     resUi.remaining.textContent = String(totalResourcesRemaining(world));

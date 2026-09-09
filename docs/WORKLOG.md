@@ -13,8 +13,8 @@ headings below by name, the `### ` blocks inside `Pieces` and `Rounds`, and the
 `- **Label:** value` fields. Rename a heading and that section silently stops
 publishing, so `check-site-sync.mjs` asserts each one arrived with content.
 
-**Round:** 6
-**State:** missions reach the player · combat levers landed · pushed
+**Round:** 7
+**State:** the match plays itself and ends · status layer lands · integrated
 
 ## What finishing means
 
@@ -113,6 +113,13 @@ Not skipped. These are the items no agent can honestly close.
 - **repo-rename** — A manual GitHub step. `START_HERE.md` warns an agent must not "correct" the remote to match the codename.
 - **machine-benchmarks** — Real low-, mid- and high-spec hardware is a long way off. Performance therefore has to be gated on machine-independent counters — draw calls, per-unit scans, triangle counts — with wall-clock recorded but never asserted, plus CPU throttling in the capture harness as a proxy. `BENCHMARKS.md` §5 already specifies it that way.
 - **hosting, newsletter, analytics** — All gated behind decisions he has not made.
+- **hud-standing** — During a match the HUD reports one side only: the player's Legacy, Command, chains and workers. Nothing on screen answers "who is winning", and under **D-039** that is deliberate — the extent and contents of the board are what scouting buys. The demo goal wants a watcher who has never seen the game to read the standing at a glance, and those two pull opposite ways. Options: leave it and let the minimap carry it; report a standing built only from what the player has actually seen; or add a spectator readout behind a flag, the way `?vision=omniscient` already works. Blocks any "who is ahead" element in the HUD, and blocks how much a demo build may show.
+- **match-length-baseline** — §3 targets 10–15 minutes, but measured against *what*? A self-playing mirror — the same opponent driving both sides, the only reproducible match the build has — now finishes in **7.6–9.8 minutes across twelve seeds**, up from 3.4–3.8. Closing the rest of the gap is no longer a tuning problem: two greedy opponents that both commit at the same moment produce a decisive battle and then a snowball, which is exactly what §2 asks combat to be. Reaching twelve minutes from here means slowing the roster itself — unit HP, damage and build times in `data/units.ts`, base HP in `data/buildings.ts` — which changes every fight in the game rather than just the AI's. So: is 10–15 the target for two *humans*, with an AI match expected to be shorter, or is it the target for any match, in which case the roster is the next thing to retune? Blocks the next pacing pass.
+- **bars-toggle-home** — The always-show health option (BENCHMARKS §2.2's Warcraft III toggle, deliberately not a held key) exists and persists, but it is bound to `V` inside `render/healthBars.ts` and appears nowhere a player would look: `ui/controlsSheet.ts` and its settings block were owned by another round. It needs a row in the reference sheet and probably a checkbox beside the quality selector. Until then the feature is real and undiscoverable, which is close to not shipping it.
+- **bar-colour-vocabulary** — A health bar fills in its owner's team hue and empties to a violet-shifted dark, so ownership and damage ride one channel and §2.3's "one identity hue per team" holds across bars, ground rings, strategic markers and the minimap. The genre standard is green/amber/red, which reads damage faster but is a second colour vocabulary competing with team identity, and red-for-hurt is the grimdark register D-005 rules out everywhere else. Which one the designer wants blocks the final palette for every status mark.
+- **enemy-squad-strength** — A squad decorator currently draws for either team, aggregating only the members the player can actually see. That tells a watcher how badly the enemy push is hurting, which is what makes a fight readable — and it is also information D-039 hands out for free rather than making scouting buy. Either it stays symmetric, or enemy squads collapse to per-unit marks. Blocks the information policy for every future aggregate readout.
+- **ai-commit-deadline** — `tests/phase1.test.ts` asserts the AI has committed to an attack within 4,000 ticks (2.2 minutes). That budget was written when a whole match lasted two minutes on a board a sixteenth of the current area. It now caps how slow the opening may be, and it is the only reason the gather rate was not lowered further: measured, an economy slow enough to put a mirror match at 8.4–12.5 minutes leaves the AI uncommitted until tick ~6,300. Raising the budget to ~9,000 is one line in a file this round did not own, and it is worth roughly three minutes of match length.
+- **outcome-disclosure** — The new end-of-match panel reports both sides' final structures, units and Legacy. That is built on the reading that fog conceals during play and a concluded match has nothing left to conceal. If instead the summary should show only what the player scouted, the panel needs a visibility filter and some rows become "unknown". Blocks nothing today; it is a one-line change either way and worth deciding before anyone outside the room sees a defeat screen.
 
 ### Answered 2026-08-06, and now written down
 
@@ -132,6 +139,131 @@ once before and restored.
 ## Rounds
 
 Newest first. Each entry is what was actually established, not what was claimed.
+
+### round 7
+
+The match plays itself, lands damage and reaches a winner. Everything below was
+re-measured by the integrator against the assembled tree, not taken from the
+builders' reports.
+
+**`npm run verify` is green: 54 test files, 626 tests, 0 failures**, plus
+typecheck, `eslint src tests`, `check-docs` (77 modules documented), `sync:site`,
+`check:site` and the production build. It arrived red at 623 passed / 3 failed
+across two files; both failures were the same fixture problem and both are
+described under *What the integrator fixed*.
+
+**The headline defect is gone.** Re-run with the exact `main.ts` setup —
+`enableAi(buildTestMap(createWorld(seed, 8, seed)))`, a 30-minute budget, damage
+counted as hit points lost per tick including entities that vanish:
+
+| seed | ended | first damage | damage dealt | peak units | player Legacy | left on map |
+|---|---|---|---|---|---|---|
+| 1337 | rival, 5:00 (t8991) | 2:18 (t4126) | 3,229 | 40 | 665 | 15,170 |
+| 7 | rival, 4:50 (t8685) | 2:32 (t4554) | 3,278 | 48 | 870 | 14,070 |
+| 42 | rival, 5:04 (t9112) | 2:28 (t4442) | 3,269 | 41 | 840 | 14,815 |
+| 20260909 | rival, 4:50 (t8705) | 2:24 (t4305) | 3,249 | 44 | 680 | 14,542 |
+| 99991 | rival, 5:08 (t9249) | 2:30 (t4514) | 3,214 | 41 | 815 | 14,910 |
+
+Five seeds, five finished matches, first contact between 2:18 and 2:32 in every
+one. This morning the same seed produced no winner at twenty minutes, not one
+hit point lost by anybody, and a player side that banked zero. Seed 1337
+reproduces the builder's own figures to the tick.
+
+A mirror — the same opponent driving both sides, the second stepped from the
+harness because `World` carries one AI — ends 5/5 between **7:54 and 10:00**
+(median 8:15), 12,071–17,123 damage, peak 63–76 units, winner three player to
+two rival, first damage 2:13–2:23. §3 asks for 10–15 minutes; this is the
+honest 2.1x, not the target.
+
+**Zero squads and zero missions form in any of those ten matches.** That figure
+is unchanged from the morning and is the round's real remainder.
+
+**Tuning that bought it** (`data/tuning.ts`): `carryAmount` 8 → 5 and
+`nodeCapacity` 1200 → 2400, so 19,200 on the map outlasts a normal match;
+`buildingDamageScale` 0.5 → 0.12, measured, because twenty line units took a
+2,200 HP Standard down in 26 seconds and the back half of every match was
+unopposed demolition; `attackAtArmySize` 8 → 10; and new levers for regrouping
+(6), a home garrison (4), staging distance (14.0), defence radius (22.0) and
+expansion onto unworked patches. `map.ts` MAP_VERSION 6 → 7 because both sides
+now open with workers already on the home cluster and a *gather* rally standing
+at the base, issued through `cmdGather`/`cmdSetRally` — the same two commands a
+player has.
+
+**The status layer is real in a real match, not only in the harness.** Health
+bars, per-unit team-identity ground rings, hit flashes and a 22-tick death
+animation now render during a live siege — photographed at tick 5600 on seed
+1337, with amber rings ringing the player's base and a blue bar across the
+Standard. It is also *cheaper*: measured on the same staging, 686 draw calls at
+rest against 893 before, 688 under a full fight against 1009, and the whole
+status layer in two instanced batches. The old always-resident per-unit rings
+were the cost.
+
+**The interface stopped hiding its own panel.** With the first-run guide open,
+`#tutorial-panel` sat at the exact origin of `#missions` and won on z-index —
+33,000 px² covered, and every objective button hit-testing to `tutorial-body`.
+A first-run player was taught the game with the operations panel behind the
+lesson. Fixed, and re-verified here: 0 overlapping pairs and 0 unreachable of 22
+controls at 1920x1080, 1366x768, 1280x800 and 1237x604, with the guide open,
+10/10 panels declaring a z-index, one background treatment, HUD share 13.5% /
+24.9% / 25.5% / 35%. The gatherable is one word — **Legacy** — on every player
+surface, refused buttons say why instead of only greying, and a match now ends
+on an outcome panel that reports length, structures, units, Legacy held and
+Legacy left rather than a 1.6-second flash.
+
+**What the integrator fixed.** Two files, both tests, both the same shape of
+problem: a fixture that had encoded the old defect as a requirement.
+
+- `tests/economy.test.ts` `[7] conservation` summed banked essence for the
+  player only, and separately asserted `rival gained nothing`. With both sides
+  mining from tick 0 the sum came up 235 short — exactly the rival's bank — so
+  the law was restated over the whole map, and the second case now proves what
+  it was really for (essence is credited to the team that mined it) by removing
+  the other crew rather than by assuming nobody told it to work.
+- `tests/tutorial.test.ts` expected the gather step to be incomplete after the
+  player selects a worker. It is complete at tick 0 now, so the guide jumps from
+  *Step 1 of 7* to *Step 3 of 7* and never shows "Recover Legacy". The test
+  pins that explicitly instead of hiding it behind a softened index; the fix is
+  a content decision and is written into **G-01**, with the note that no
+  world-state predicate can distinguish the opening's gather order from the
+  player's — it needs the guide to watch the command stream.
+
+Also removed a stray 11 KB file named `true` from the repository root: the
+output of `measure-hud.mjs` captured by a mis-typed shell redirect.
+
+**File ownership held.** Every modified source file sits inside its builder's
+declared set. Three files outside all three sets, none an authored source edit:
+`public/data/build.json` and `public/data/progress.json` are regenerated by
+`predev`/`prebuild`/`sync:site`, and `docs/GATES.md` is untracked with content
+that predates the round. `src/sim/` is still clean — 0 `Math.random`, 0 wall
+clock, 0 DOM across 20 modules — and `sim/ai.ts` lost the three unit-type
+literals it used to name. Five named-type sites remain and all five predate this
+round: `map.ts` names the worker, the line unit and the base, and `ai.ts` still
+names `'outpost'` (D-029).
+
+**What the pictures show, and it is not all good.** `npm run capture` produced
+7/7 clean shots with no console errors, and none of them can photograph a fight:
+the shot list tops out at tick 2700 and first damage is tick 4126. Frames taken
+at 4600, 5600 and 9100 show the fight is readable *close in* — but three things
+are visibly wrong at a demo. The bar colour vocabulary misleads: bars fill in
+the owner's team hue, so the attacking rival's half-dead units carry **red**
+bars and the defender's near-full Standard carries a **blue** one, and a
+newcomer reads exactly the opposite of the truth (this is the open
+`bar-colour-vocabulary` gate, now with a photograph). The `overview` and
+`wartable` shots are 95% black, because both frame the map centre and the player
+has never seen it. And the minimap is a near-black disc with one gold dot for
+the whole match. Nothing overlaps, at any viewport, in any shot.
+
+**Known and not closed.** At 1366x768 and 1280x800 the operations console shows
+131 and 163 pixels of its 301 pixels of content; five controls — the three
+priority buttons, the fallback selector and Cancel operation — hit-test to
+something else at rest. They are one scroll away, not dead, and the fold is now
+drawn. Independently reproduced here. `#chain` below it is the ceiling, and it
+belonged to no builder this round.
+
+**The single thing still standing between this build and a confident gameplay
+demo:** neither side ever forms a squad or orders a mission — zero in all ten
+matches measured — so the layer the project exists for, and every surface built
+for it, has still never appeared in a running game.
 
 ### round 6
 
